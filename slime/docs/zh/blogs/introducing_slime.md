@@ -40,6 +40,7 @@ slime 以不同的方式看待强化学习中的数据采样。我们在 slime �
 
 凭借 Ray 通过 `.remote()` 实现的异步执行，slime 自然支持异步训练。改变同步行为就像移动 `ray.get` 操作一样简单。为了便于尝试不同的策略，我们没有将代码封装在训练器类中，而是简单地将训练循环暴露在入口文件 `train.py` 中。
 
+
 ## 为性能而生
 
 **一个合格的强化学习框架必须既快，又持续地快。**
@@ -64,6 +65,22 @@ slime 以不同的方式看待强化学习中的数据采样。我们在 slime �
 
 Megatron 可能非常复杂，因此我们还提供了 ckpt 转换工具来简化其使用。
 
+slime->ray->SGLang->Megatron-LM
+
+oMLX policy slot| oMLX PRM slot | mlx-tune
+
+| Region | Size | Contents |
+|--------|------|---------|
+| oMLX policy slot (Qwen3-8B 4-bit) | ~5 GB | Active model weights |
+| oMLX PRM slot (Qwen3-4B 4-bit) | ~3 GB | Judge model weights |
+| oMLX KV hot cache | ~8 GB | Active request KV blocks |
+| mlx-tune LoRA + gradients | ~10 GB | LoRA adapters, optimizer states |
+| OS + Python overhead | ~8 GB | System |
+| oMLX NVMe cold tier | → SSD | Spilled KV blocks |
+| **Total GPU memory** | **~34 GB** | Fits in 64 GB unified memory |
+
+
+slime->ray->SGLang->Megatron-LM
 **持续地快**意味着要跟上不断发展的推理和训练框架。
 
 如果你曾关注 [SGLang 的 PR 列表](https://github.com/sgl-project/sglang/pulls)，你会被其快速的演进所震惊。另一方面，Megatron 通常被深度定制，每个组织都维护着自己的分叉。slime 旨在跟上游 SGLang 的变化，并适应内部 Megatron 变体中的优化。这也是我们追求对 SGLang 和 Megatron 原生支持的另一个原因。参数传递使得升级毫不费力。

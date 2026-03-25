@@ -1,0 +1,85 @@
+%%{
+  init: {
+    "theme": "base",
+    "themeVariables": {
+      "fontFamily": "Inter, Helvetica Neue, sans-serif",
+      "fontSize": "22px",
+      "primaryColor": "#0D2137",
+      "primaryTextColor": "#E8F4FD",
+      "primaryBorderColor": "#4FC3F7",
+      "lineColor": "#90CAF9",
+      "background": "#0A1929",
+      "mainBkg": "#0A1929",
+      "clusterBkg": "#0D2137",
+      "clusterBorder": "#4FC3F7",
+      "titleColor": "#E8F4FD",
+      "edgeLabelBackground": "#0D2137"
+    }
+  }
+}%%
+graph TD
+    DS["Task Dataset\nseta_env JSONL"]
+
+    subgraph mac["Apple Silicon Mac — Unified Memory"]
+        direction TB
+
+        AL["Async RL Loop\ntrain_async.py"]
+
+        subgraph agent_col["Agent Loop  (asyncio + openai client)"]
+            AG["AgentLoop\nmulti-turn tool-call"]
+            EV["LocalEnvPool\nTerminalEnv · Docker"]
+        end
+
+        OP["oMLX Policy Slot\nQwen3-8B · 4-bit\n/v1/chat/completions"]
+
+        RB["Rollout Buffer\nasyncio.Queue"]
+
+        PR["oMLX PRM Slot\nQwen3-4B · 4-bit\nmajority vote × m\n(optional)"]
+
+        subgraph train_col["mlx-tune"]
+            MT["GRPOTrainer\nLoRA / full · MLX"]
+        end
+    end
+
+    subgraph obs["Observability"]
+        WB["W&B"]
+        LG["JSONL Log"]
+    end
+
+    DS -->|prompts| AL
+    AL -->|dispatch| AG
+    AG <-->|/v1/chat/completions| OP
+    AG <-->|exec bash · observe| EV
+    AG -->|scored trajectory| RB
+    RB <-->|step rewards| PR
+    RB -->|scored batch| MT
+    MT -->|weight sync| OP
+    AL -->|metrics| WB
+    AL -->|trace| LG
+
+    style mac fill:#091825,stroke:#4FC3F7,stroke-width:3px,color:#E8F4FD
+    style agent_col fill:#0A1F35,stroke:#00B4D8,stroke-width:2px,color:#CAF0F8
+    style train_col fill:#160A28,stroke:#9C27B0,stroke-width:2px,color:#F3E5F5
+    style obs fill:#0A180A,stroke:#66BB6A,stroke-width:2px,color:#C8E6C9
+
+    style DS fill:#1B5E20,stroke:#4CAF50,stroke-width:2px,color:#E8F5E9
+    style AL fill:#0D47A1,stroke:#42A5F5,stroke-width:2px,color:#E3F2FD
+    style AG fill:#006278,stroke:#00B4D8,stroke-width:2px,color:#CAF0F8
+    style EV fill:#004D6D,stroke:#00B4D8,stroke-width:2px,color:#CAF0F8
+    style OP fill:#1A3060,stroke:#7986CB,stroke-width:2px,color:#E8EAF6
+    style RB fill:#1A237E,stroke:#7986CB,stroke-width:2px,color:#E8EAF6
+    style PR fill:#7B3F00,stroke:#F59E0B,stroke-width:2px,color:#FEF3C7
+    style MT fill:#4A148C,stroke:#CE93D8,stroke-width:2px,color:#F3E5F5
+    style WB fill:#1B3A1B,stroke:#66BB6A,stroke-width:2px,color:#C8E6C9
+    style LG fill:#1B3A1B,stroke:#66BB6A,stroke-width:2px,color:#C8E6C9
+
+    linkStyle 0 stroke:#4CAF50,stroke-width:2px
+    linkStyle 1 stroke:#42A5F5,stroke-width:2px
+    linkStyle 2 stroke:#7986CB,stroke-width:3px
+    linkStyle 3 stroke:#00B4D8,stroke-width:2px
+    linkStyle 4 stroke:#7986CB,stroke-width:2px
+    linkStyle 5 stroke:#F59E0B,stroke-width:2px
+    linkStyle 6 stroke:#CE93D8,stroke-width:2px
+    linkStyle 7 stroke:#00B4D8,stroke-width:3px
+    linkStyle 8 stroke:#66BB6A,stroke-width:1px
+    linkStyle 9 stroke:#66BB6A,stroke-width:1px

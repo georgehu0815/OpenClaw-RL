@@ -58,7 +58,7 @@ OpenClaw-RL runs on a **fully MLX-native stack** on Apple Silicon Macs, replacin
 │                                                                   │
 │   ┌────────────────┐  multi-turn   ┌───────────────────────────┐ │
 │   │  User /        │──conversation▶│  oMLX Server              │ │
-│   │  OpenClaw App  │               │  (FastAPI, OpenAI-compat) │ │
+│   │  OpenBot App  │               │  (FastAPI, OpenAI-compat) │ │
 │   └────────────────┘               │  continuous batching      │ │
 │                                    │  tiered KV cache          │ │
 │                                    └────────────┬──────────────┘ │

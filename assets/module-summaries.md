@@ -1,4 +1,4 @@
-# OpenClaw-RL — Module Summaries (PPT Reference)
+# OpenClaw-RL — Module Summaries 
 
 ## oMLX Server
 **"The AI Brain"**
