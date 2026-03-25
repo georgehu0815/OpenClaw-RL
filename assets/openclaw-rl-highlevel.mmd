@@ -1,0 +1,59 @@
+%%{
+  init: {
+    "theme": "base",
+    "themeVariables": {
+      "fontFamily": "Inter, Helvetica Neue, sans-serif",
+      "fontSize": "24px",
+      "primaryColor": "#00B4D8",
+      "primaryTextColor": "#FFFFFF",
+      "primaryBorderColor": "#007EA7",
+      "lineColor": "#90E0EF",
+      "secondaryColor": "#1E3A5F",
+      "tertiaryColor": "#0A1929",
+      "background": "#0A1929",
+      "mainBkg": "#0A1929",
+      "clusterBkg": "#112240",
+      "clusterBorder": "#90E0EF",
+      "titleColor": "#CAF0F8",
+      "edgeLabelBackground": "#112240"
+    }
+  }
+}%%
+graph LR
+    subgraph inputs["  Input Sources  "]
+        OC["OpenClaw App"]
+        AT["Agentic Tasks"]
+    end
+
+    subgraph mac["  Apple Silicon — Unified Memory  "]
+        INF["oMLX Server"]
+        BUF["Rollout Buffer"]
+        PRM["PRM Judge"]
+        TRN["mlx-tune Trainer"]
+    end
+
+    OC -->|conversations| INF
+    AT -->|tasks| INF
+    INF -->|trajectories| BUF
+    BUF -->|evaluate| PRM
+    PRM -->|rewards| BUF
+    BUF -->|training data| TRN
+    TRN -->|updated weights| INF
+
+    style inputs fill:#0D1F35,stroke:#90E0EF,stroke-width:2px,color:#CAF0F8
+    style mac fill:#0A2040,stroke:#00B4D8,stroke-width:3px,color:#CAF0F8
+
+    style OC fill:#1565C0,stroke:#42A5F5,stroke-width:2px,color:#E3F2FD
+    style AT fill:#1565C0,stroke:#42A5F5,stroke-width:2px,color:#E3F2FD
+    style INF fill:#006D8F,stroke:#00B4D8,stroke-width:3px,color:#FFFFFF
+    style BUF fill:#1E3A5F,stroke:#90E0EF,stroke-width:2px,color:#CAF0F8
+    style PRM fill:#B45309,stroke:#F59E0B,stroke-width:3px,color:#FEF3C7
+    style TRN fill:#065F46,stroke:#34D399,stroke-width:3px,color:#D1FAE5
+
+    linkStyle 0 stroke:#42A5F5,stroke-width:3px
+    linkStyle 1 stroke:#42A5F5,stroke-width:3px
+    linkStyle 2 stroke:#90E0EF,stroke-width:3px
+    linkStyle 3 stroke:#F59E0B,stroke-width:3px
+    linkStyle 4 stroke:#F59E0B,stroke-width:3px
+    linkStyle 5 stroke:#34D399,stroke-width:3px
+    linkStyle 6 stroke:#34D399,stroke-width:3px
