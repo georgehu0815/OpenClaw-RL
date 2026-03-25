@@ -1,0 +1,280 @@
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#f0f4ff',
+    'primaryTextColor': '#12182b',
+    'primaryBorderColor': '#3b5bdb',
+    'lineColor': '#4a4a6a',
+    'background': '#ffffff',
+    'mainBkg': '#ffffff',
+    'clusterBkg': '#fafafa',
+    'titleColor': '#12182b',
+    'edgeLabelBackground': '#ffffff',
+    'fontFamily': 'Inter, Segoe UI, sans-serif',
+    'fontSize': '14px'
+  }
+}}%%
+graph TB
+
+  %% ─────────────────────────────────────────
+  %% HARDWARE PLATFORM
+  %% ─────────────────────────────────────────
+  subgraph HW["🍎 Apple Silicon Mac — Unified Memory Pool"]
+    direction TB
+
+    %% ─── oMLX Inference Server ───
+    subgraph OMLX["⚡ oMLX Inference Server  (localhost:8000)"]
+      direction LR
+
+      subgraph OMLX_POLICY["Policy Model Slot"]
+        POL["🤖 Policy Model<br/>Qwen3-4B/8B/32B<br/>4-bit MLX safetensors<br/>~3–20 GB"]
+      end
+
+      subgraph OMLX_PRM["PRM / Judge Slot"]
+        PRM["🧠 PRM / Judge Model<br/>Qwen3-4B 4-bit<br/>m=3 majority vote<br/>~3 GB"]
+      end
+
+      subgraph OMLX_FEAT["oMLX Features"]
+        direction TB
+        CB["🔄 Continuous Batching<br/>prefill + generation"]
+        KVC["💾 Tiered KV Cache<br/>hot GPU ↔ cold NVMe"]
+        PFXC["🔗 Prefix Cache<br/>CoW shared prefixes"]
+        API_COMPAT["🌐 OpenAI + Anthropic<br/>API compatible"]
+      end
+    end
+
+    %% ─── mlx-tune Trainer ───
+    subgraph MXTUNE["🏋️ mlx-tune Trainer"]
+      direction LR
+
+      subgraph MXTUNE_TRAINERS["Trainers"]
+        direction TB
+        GRPO_T["📉 GRPOTrainer<br/>num_generations=8<br/>ε∈[0.2, 0.28]<br/>β KL penalty"]
+        SFT_T["📖 SFTTrainer<br/>cold-start SFT"]
+        VLM_T["🖼️ VLMSFTTrainer<br/>Qwen3-VL GUI"]
+      end
+
+      subgraph MXTUNE_LORA["LoRA Config"]
+        direction TB
+        LORA["🔬 LoRA Adapters<br/>r=8–32<br/>target: q/k/v/o proj<br/>gate/up/down proj"]
+        GRADCK["💡 Grad Checkpoint<br/>saves ~40% memory"]
+      end
+
+      subgraph MXTUNE_CKPT["Checkpoint Export"]
+        direction TB
+        SAVE_LORA["💾 save_pretrained<br/>LoRA adapters only"]
+        SAVE_MERGE["🗜️ save_pretrained_merged<br/>full merged model"]
+        SAVE_GGUF["📦 save_pretrained_gguf<br/>for Ollama / llama.cpp"]
+        HUB["🤗 push_to_hub<br/>HuggingFace"]
+      end
+    end
+
+    %% ─── Memory Layout ───
+    subgraph MEMLAYOUT["📊 Unified Memory Allocation"]
+      direction LR
+      MEM_POL["Policy model<br/>4-bit Qwen3-8B<br/>≈ 5 GB"]
+      MEM_PRM["PRM model<br/>4-bit Qwen3-4B<br/>≈ 3 GB"]
+      MEM_TRAIN["mlx-tune training<br/>LoRA + gradients<br/>≈ 8–16 GB"]
+      MEM_SSD["oMLX NVMe<br/>KV cold tier<br/>spill → SSD"]
+    end
+
+  end
+
+  %% ─────────────────────────────────────────
+  %% ENTRY POINTS
+  %% ─────────────────────────────────────────
+  subgraph ENTRY["🚪 Entry Points"]
+    direction LR
+    U1["👤 User<br/>(OpenClaw App)"]
+    U2["🔧 Terminal<br/>SETA / Docker"]
+    U3["🖥️ GUI / Desktop<br/>OSWorld VM"]
+    U4["💻 SWE-Bench<br/>GitHub Docker"]
+    U5["🧮 Math / Tool-Call<br/>Python Sandbox"]
+  end
+
+  %% ─────────────────────────────────────────
+  %% TRACK 1 — PERSONAL AGENT
+  %% ─────────────────────────────────────────
+  subgraph T1["🟦 TRACK 1 — Personal Agent (OpenClaw)"]
+    direction TB
+
+    subgraph T1_PROXY["FastAPI Proxy Layer"]
+      PROXY["🌐 OpenClaw API Proxy<br/>openclaw_api_server.py<br/>intercepts conversations<br/>session tracking"]
+    end
+
+    subgraph T1_PRM_FLOW["PRM Scoring Pipeline"]
+      direction LR
+      NEXT_STATE["📩 Next State<br/>turn N+1 arrives<br/>→ evidence for turn N"]
+      PRM_FIRE["🔥 Fire PRM<br/>asyncio.gather<br/>m=3 parallel calls"]
+      VOTE["🗳️ Majority Vote<br/>+1 / −1 / 0<br/>tie → abstain 0"]
+      MASK["🎭 loss_mask<br/>score≠0 → [1,1,...]<br/>score=0 → [0,0,...]<br/>no next_state → [0,...]"]
+    end
+
+    subgraph T1_METHODS["Training Methods"]
+      direction LR
+      M_RL["📊 Binary RL<br/>GRPO advantage<br/>scalar +1/−1/0"]
+      M_OPD["📚 OPD<br/>token-level<br/>log_teacher − log_student"]
+      M_TOPK["🔝 OPD Top-K<br/>reverse KL over<br/>top-K distribution"]
+      M_COMB["🔀 Combined<br/>w_rl×GRPO +<br/>w_opd×teacher"]
+    end
+
+    subgraph T1_BUF["Rollout Buffer"]
+      BUF["📦 Async Queue<br/>_pending_turn_data<br/>waits for PRM<br/>submission_enabled gate"]
+    end
+  end
+
+  %% ─────────────────────────────────────────
+  %% TRACK 2 — GENERAL AGENTIC RL
+  %% ─────────────────────────────────────────
+  subgraph T2["🟩 TRACK 2 — General Agentic RL"]
+    direction LR
+
+    subgraph T2_TERM["Terminal"]
+      direction TB
+      TERM_POOL["🐳 Docker Pool<br/>pool_server.py<br/>:5000"]
+      TERM_ENV["Container<br/>bash tasks"]
+    end
+
+    subgraph T2_GUI["GUI Agent"]
+      direction TB
+      GUI_POOL["☁️ VM Pool<br/>env_pool_server.py"]
+      GUI_ENV["OSWorld VM<br/>screenshots"]
+      GUI_ACT["pyautogui<br/>actions"]
+    end
+
+    subgraph T2_SWE["SWE-Bench"]
+      direction TB
+      SWE_POOL["🏗️ ECS Pool<br/>:18090 + :5000"]
+      SWE_ENV["Docker repo<br/>test suite"]
+    end
+
+    subgraph T2_TOOL["Tool-Call / Math"]
+      direction TB
+      TOOL_SBX["🐍 Python Sandbox<br/>tool_sandbox.py"]
+      TOOL_DATA["📐 ReTool / DAPO<br/>AIME eval"]
+    end
+  end
+
+  %% ─────────────────────────────────────────
+  %% DEPLOYMENT OPTIONS
+  %% ─────────────────────────────────────────
+  subgraph DEPLOY["☁️ Deployment Options"]
+    direction LR
+    D_LOCAL["🖥️ Local Mac<br/>LoRA (16GB+)<br/>Full FT (64GB+)"]
+    D_TINKER["☁️ Tinker Cloud<br/>LoRA only<br/>no local GPU"]
+    D_HYBRID["🔀 Hybrid<br/>oMLX local rollout<br/>Unsloth cloud train"]
+  end
+
+  %% ─────────────────────────────────────────
+  %% SUPPORTED MODELS
+  %% ─────────────────────────────────────────
+  subgraph MODELS["🤖 Supported Models (mlx-community 4-bit)"]
+    direction LR
+    MOD1["Qwen3<br/>4B / 8B / 32B"]
+    MOD2["Qwen3-VL<br/>4B / 8B (GUI)"]
+    MOD3["Qwen2.5<br/>32B"]
+    MOD4["DeepSeek-R1<br/>Distill variants"]
+    MOD5["Llama 3.x<br/>Gemma 2/3"]
+  end
+
+  %% ─────────────────────────────────────────
+  %% OBSERVABILITY
+  %% ─────────────────────────────────────────
+  subgraph OBS["📡 Observability"]
+    direction LR
+    WB["📊 Weights & Biases<br/>loss / reward<br/>prm_eval_score"]
+    ADMIN["🖥️ oMLX Dashboard<br/>localhost:8000/admin<br/>throughput / cache / memory"]
+    JSONL["📄 Record Files<br/>*_record.jsonl<br/>*_prm.jsonl"]
+  end
+
+  %% ─────────────────────────────────────────
+  %% CONNECTIONS — Track 1 main flow
+  %% ─────────────────────────────────────────
+  U1 -->|"multi-turn<br/>conversation"| PROXY
+  PROXY -->|"forward request"| POL
+  POL -->|"response + logprobs"| PROXY
+  PROXY -->|"turn N data<br/>(tokens, logprobs)"| BUF
+
+  PROXY -->|"turn N+1 = next_state"| NEXT_STATE
+  NEXT_STATE --> PRM_FIRE
+  PRM_FIRE -->|"m=3 async calls"| PRM
+  PRM -->|"\\boxed{1/-1/0}"| VOTE
+  VOTE --> MASK
+  MASK -->|"scored sample"| BUF
+
+  BUF -->|"loss_mask +<br/>reward signal"| GRPO_T
+  GRPO_T -->|"A_i=(r_i−μ)/σ<br/>PPO clip update"| LORA
+  LORA -->|"hot-reload adapters"| POL
+
+  M_RL --> BUF
+  M_OPD --> BUF
+  M_TOPK --> BUF
+  M_COMB --> BUF
+
+  %% ─────────────────────────────────────────
+  %% CONNECTIONS — Track 2
+  %% ─────────────────────────────────────────
+  U2 --> TERM_POOL --> TERM_ENV -->|"bash reward"| BUF
+  U3 --> GUI_POOL --> GUI_ENV --> GUI_ACT -->|"OSWorld score"| BUF
+  U4 --> SWE_POOL --> SWE_ENV -->|"test pass/fail"| BUF
+  U5 --> TOOL_SBX -->|"answer correct"| BUF
+  TOOL_DATA -->|"prompts + labels"| BUF
+
+  %% VLM path
+  GUI_ENV -->|"screenshot"| VLM_T
+  VLM_T --> LORA
+
+  %% ─────────────────────────────────────────
+  %% CONNECTIONS — Infrastructure
+  %% ─────────────────────────────────────────
+  GRPO_T --> SAVE_LORA
+  SAVE_LORA --> SAVE_MERGE
+  SAVE_MERGE --> SAVE_GGUF
+  SAVE_MERGE --> HUB
+
+  POL -.->|"KV spill"| KVC
+  KVC -.->|"cold tier"| MEM_SSD
+  PFXC -.->|"shared prefix"| PRM
+
+  GRPO_T --> WB
+  PROXY --> JSONL
+  POL --> ADMIN
+  PRM --> ADMIN
+
+  %% ─────────────────────────────────────────
+  %% CONNECTIONS — Memory
+  %% ─────────────────────────────────────────
+  POL -.-> MEM_POL
+  PRM -.-> MEM_PRM
+  LORA -.-> MEM_TRAIN
+
+  %% ─────────────────────────────────────────
+  %% STYLES
+  %% ─────────────────────────────────────────
+  classDef entryNode   fill:#dbe4ff,stroke:#3b5bdb,stroke-width:2px,color:#12182b,font-weight:bold
+  classDef omlxNode    fill:#d0ebff,stroke:#1864ab,stroke-width:2px,color:#12182b
+  classDef prmNode     fill:#e5dbff,stroke:#5f3dc4,stroke-width:2px,color:#12182b
+  classDef trainerNode fill:#ffe3e3,stroke:#c92a2a,stroke-width:2px,color:#12182b
+  classDef loraNode    fill:#fff4e6,stroke:#d9480f,stroke-width:2px,color:#12182b
+  classDef bufNode     fill:#d3f9d8,stroke:#2f9e44,stroke-width:2px,color:#12182b
+  classDef methodNode  fill:#fff9db,stroke:#e67700,stroke-width:2px,color:#12182b
+  classDef envNode     fill:#e3fafc,stroke:#0c8599,stroke-width:2px,color:#12182b
+  classDef ckptNode    fill:#f8f0fc,stroke:#ae3ec9,stroke-width:2px,color:#12182b
+  classDef memNode     fill:#f1f3f5,stroke:#868e96,stroke-width:1.5px,color:#12182b
+  classDef obsNode     fill:#f8f9fa,stroke:#495057,stroke-width:1.5px,color:#12182b
+  classDef deployNode  fill:#fff0f6,stroke:#c2255c,stroke-width:1.5px,color:#12182b
+  classDef modelNode   fill:#f3f0ff,stroke:#7048e8,stroke-width:1.5px,color:#12182b
+
+  class U1,U2,U3,U4,U5 entryNode
+  class POL,CB,KVC,PFXC,API_COMPAT omlxNode
+  class PRM,PRM_FIRE,VOTE,MASK,NEXT_STATE prmNode
+  class GRPO_T,SFT_T,VLM_T,GRADCK trainerNode
+  class LORA loraNode
+  class BUF,PROXY bufNode
+  class M_RL,M_OPD,M_TOPK,M_COMB methodNode
+  class TERM_POOL,TERM_ENV,GUI_POOL,GUI_ENV,GUI_ACT,SWE_POOL,SWE_ENV,TOOL_SBX,TOOL_DATA envNode
+  class SAVE_LORA,SAVE_MERGE,SAVE_GGUF,HUB ckptNode
+  class MEM_POL,MEM_PRM,MEM_TRAIN,MEM_SSD memNode
+  class WB,ADMIN,JSONL obsNode
+  class D_LOCAL,D_TINKER,D_HYBRID deployNode
+  class MOD1,MOD2,MOD3,MOD4,MOD5 modelNode

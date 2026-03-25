@@ -179,7 +179,7 @@ async def generate(args, sample: Sample, sampling_params, evaluation: bool = Fal
 
 
 class OpenClawAPIServer:
-    """Proxy between OpenClaw and SGLang for RL training data collection.
+    """Proxy between OpenClaw and oMLX / SGLang for RL training data collection.
 
     OpenClaw sends ``X-Session-Id`` and ``X-Turn-Type`` headers with every
     request.  The proxy simply forwards to SGLang, and when ``turn_type``

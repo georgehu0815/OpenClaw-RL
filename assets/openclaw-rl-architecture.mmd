@@ -1,0 +1,216 @@
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#e7f5ff',
+    'primaryTextColor': '#1a1a2e',
+    'primaryBorderColor': '#1971c2',
+    'lineColor': '#495057',
+    'secondaryColor': '#d3f9d8',
+    'tertiaryColor': '#f8f9fa',
+    'background': '#ffffff',
+    'mainBkg': '#ffffff',
+    'nodeBorder': '#495057',
+    'clusterBkg': '#f8f9fa',
+    'titleColor': '#1a1a2e',
+    'edgeLabelBackground': '#ffffff',
+    'fontFamily': 'Inter, Segoe UI, sans-serif',
+    'fontSize': '15px'
+  }
+}}%%
+graph TB
+
+  %% ─────────────────────────────────────────
+  %% TOP: USERS & ENTRY POINTS
+  %% ─────────────────────────────────────────
+  subgraph USERS["⬛ Entry Points"]
+    direction LR
+    U1["👤 User<br/>(OpenClaw App)"]
+    U2["🔧 Terminal<br/>Environment"]
+    U3["🖥️ GUI / Desktop<br/>Environment"]
+    U4["💻 SWE-Bench<br/>GitHub Repo"]
+    U5["🧮 Math / Tool-Call<br/>Python Sandbox"]
+  end
+
+  %% ─────────────────────────────────────────
+  %% TRACK 1: PERSONAL AGENT
+  %% ─────────────────────────────────────────
+  subgraph T1["🟦 TRACK 1 — Personal Agent (OpenClaw)"]
+    direction TB
+
+    subgraph T1_API["API Layer"]
+      direction LR
+      API["🌐 API Server<br/>(FastAPI + SGLang)<br/>OpenAI-compatible proxy"]
+      SGLANG_SERVE["⚡ SGLang Engine<br/>(Policy Model Serving)<br/>TP=2, context=32k"]
+    end
+
+    subgraph T1_METHODS["Training Methods"]
+      direction LR
+      M1["📊 Binary RL<br/>(GRPO)<br/>reward: +1/−1/0"]
+      M2["📚 On-Policy<br/>Distillation (OPD)<br/>token-level / top-K"]
+      M3["🔀 Combined<br/>w_rl × GRPO +<br/>w_opd × teacher"]
+    end
+
+    subgraph T1_DEPLOY["Deployment"]
+      direction LR
+      D1["🖥️ Local GPU<br/>Full Fine-Tune<br/>8+ GPUs"]
+      D2["🔬 Local GPU<br/>LoRA<br/>1–2 GPUs"]
+      D3["☁️ Tinker Cloud<br/>No local GPU<br/>LoRA only"]
+    end
+  end
+
+  %% ─────────────────────────────────────────
+  %% TRACK 2: GENERAL AGENTIC RL
+  %% ─────────────────────────────────────────
+  subgraph T2["🟩 TRACK 2 — General Agentic RL"]
+    direction TB
+
+    subgraph T2_TERMINAL["Terminal Agent"]
+      TERM_POOL["🐳 Docker Pool Server<br/>(pool_server.py :5000)"]
+      TERM_ENV["Container<br/>SETA Tasks<br/>(bash commands)"]
+    end
+
+    subgraph T2_GUI["GUI Agent"]
+      GUI_POOL["☁️ VM Pool Server<br/>(env_pool_server.py)"]
+      GUI_ENV["Cloud VM<br/>OSWorld Env<br/>(pyautogui)"]
+      GUI_VLM["🖼️ Qwen3-VL<br/>Screenshot → Action"]
+    end
+
+    subgraph T2_SWE["SWE-Bench Agent"]
+      SWE_POOL["🏗️ Env Pool Server<br/>(:18090) + ECS nodes<br/>(:5000)"]
+      SWE_ENV["Docker Container<br/>GitHub Repo<br/>Test Suite"]
+    end
+
+    subgraph T2_TOOL["Tool-Call / Math"]
+      TOOL_SBX["🐍 Python Sandbox<br/>(tool_sandbox.py)"]
+      TOOL_DATA["📐 ReTool Dataset<br/>DAPO-Math-17k<br/>AIME eval"]
+    end
+  end
+
+  %% ─────────────────────────────────────────
+  %% SHARED CORE INFRASTRUCTURE
+  %% ─────────────────────────────────────────
+  subgraph CORE["⬛ Shared Infrastructure"]
+    direction TB
+
+    subgraph SLIME_LAYER["🟣 SLIME Framework (THUDM)"]
+      direction LR
+      ROLLOUT_BUF["📦 Rollout Buffer<br/>(Ray actors)<br/>async trajectory queue"]
+      REWARD_GATE["🎯 Reward Aggregator<br/>score / filter<br/>balance-data"]
+    end
+
+    subgraph PRM_LAYER["🟠 PRM / Judge Layer"]
+      direction LR
+      PRM["🧠 Process Reward Model<br/>(SGLang engine)<br/>majority vote × m"]
+      JUDGE["⚖️ Outcome Judge<br/>binary / hindsight<br/>hint extractor"]
+    end
+
+    subgraph TRAINER["🔴 Policy Trainer — Megatron-LM"]
+      direction LR
+      MEGA["⚙️ Megatron-LM<br/>TP / PP / EP<br/>distributed training"]
+      GRPO_LOSS["📉 GRPO Loss<br/>PPO clip [0.2, 0.28]<br/>KL regularization"]
+      OPT["🔧 Adam Optimizer<br/>CPU offload<br/>precision-aware"]
+    end
+
+    subgraph CKPT["💾 Checkpoint Management"]
+      direction LR
+      HF_CKPT["🤗 HuggingFace<br/>checkpoint<br/>(input / output)"]
+      MEGA_CKPT["🗄️ Megatron<br/>distributed ckpt<br/>(sharded TP/PP)"]
+      BRIDGE["🔄 HF ↔ Megatron<br/>bridge converter"]
+    end
+  end
+
+  %% ─────────────────────────────────────────
+  %% MODEL SUPPORT
+  %% ─────────────────────────────────────────
+  subgraph MODELS["🟡 Supported Models"]
+    direction LR
+    MOD1["Qwen3<br/>4B / 8B / 32B"]
+    MOD2["Qwen3-VL<br/>4B / 8B"]
+    MOD3["Qwen2.5<br/>32B"]
+    MOD4["DeepSeek-R1<br/>Distill variants"]
+    MOD5["GLM4<br/>9B / 30B / 355B"]
+  end
+
+  %% ─────────────────────────────────────────
+  %% OBSERVABILITY
+  %% ─────────────────────────────────────────
+  subgraph OBS["📡 Observability"]
+    direction LR
+    WB["📊 Weights & Biases<br/>loss / reward / eval"]
+    RAY_DASH["🖥️ Ray Dashboard<br/>:8265"]
+  end
+
+  %% ─────────────────────────────────────────
+  %% CONNECTIONS — Track 1
+  %% ─────────────────────────────────────────
+  U1 -->|"multi-turn<br/>conversation"| API
+  API -->|"serve response"| SGLANG_SERVE
+  API -->|"trajectories"| ROLLOUT_BUF
+  SGLANG_SERVE -.->|"model weights"| MEGA
+
+  M1 -->|"GRPO advantage"| ROLLOUT_BUF
+  M2 -->|"teacher log-probs"| ROLLOUT_BUF
+  M3 -->|"combined advantage"| ROLLOUT_BUF
+
+  %% ─────────────────────────────────────────
+  %% CONNECTIONS — Track 2
+  %% ─────────────────────────────────────────
+  U2 -->|"bash tasks"| TERM_POOL
+  TERM_POOL --> TERM_ENV
+  TERM_ENV -->|"reward signal"| ROLLOUT_BUF
+
+  U3 -->|"screen / state"| GUI_POOL
+  GUI_POOL --> GUI_ENV
+  GUI_ENV -->|"screenshot"| GUI_VLM
+  GUI_VLM -->|"action + reward"| ROLLOUT_BUF
+
+  U4 -->|"issue + repo"| SWE_POOL
+  SWE_POOL --> SWE_ENV
+  SWE_ENV -->|"patch success/fail"| ROLLOUT_BUF
+
+  U5 -->|"math problems"| TOOL_SBX
+  TOOL_DATA --> REWARD_GATE
+  TOOL_SBX -->|"code output"| ROLLOUT_BUF
+
+  %% ─────────────────────────────────────────
+  %% CONNECTIONS — Core
+  %% ─────────────────────────────────────────
+  ROLLOUT_BUF --> REWARD_GATE
+  REWARD_GATE -->|"scored trajectories"| PRM
+  REWARD_GATE -->|"terminal reward"| JUDGE
+  PRM -->|"step-wise rewards"| GRPO_LOSS
+  JUDGE -->|"episode reward"| GRPO_LOSS
+  GRPO_LOSS --> OPT
+  OPT --> MEGA
+  MEGA -->|"gradient updates"| SGLANG_SERVE
+
+  HF_CKPT --> BRIDGE
+  BRIDGE --> MEGA_CKPT
+  MEGA_CKPT -.->|"load / save"| MEGA
+
+  MEGA --> WB
+  MEGA --> RAY_DASH
+
+  %% ─────────────────────────────────────────
+  %% STYLES
+  %% ─────────────────────────────────────────
+  classDef userNode fill:#e7f5ff,stroke:#1971c2,stroke-width:2px,color:#1a1a2e,font-weight:bold
+  classDef apiNode fill:#d0ebff,stroke:#1864ab,stroke-width:2px,color:#1a1a2e
+  classDef methodNode fill:#fff3bf,stroke:#e67700,stroke-width:2px,color:#1a1a2e
+  classDef envNode fill:#d3f9d8,stroke:#2f9e44,stroke-width:2px,color:#1a1a2e
+  classDef coreNode fill:#e5dbff,stroke:#5f3dc4,stroke-width:2px,color:#1a1a2e
+  classDef trainerNode fill:#ffe3e3,stroke:#c92a2a,stroke-width:2px,color:#1a1a2e
+  classDef ckptNode fill:#fff4e6,stroke:#d9480f,stroke-width:2px,color:#1a1a2e
+  classDef modelNode fill:#f3f0ff,stroke:#7048e8,stroke-width:2px,color:#1a1a2e
+  classDef obsNode fill:#f8f9fa,stroke:#495057,stroke-width:1.5px,color:#1a1a2e
+
+  class U1,U2,U3,U4,U5 userNode
+  class API,SGLANG_SERVE apiNode
+  class M1,M2,M3 methodNode
+  class D1,D2,D3 methodNode
+  class TERM_POOL,TERM_ENV,GUI_POOL,GUI_ENV,GUI_VLM,SWE_POOL,SWE_ENV,TOOL_SBX,TOOL_DATA envNode
+  class ROLLOUT_BUF,REWARD_GATE,PRM,JUDGE coreNode
+  class MEGA,GRPO_LOSS,OPT trainerNode
+  class HF_CKPT,MEGA_CKPT,BRIDGE ckptNode
+  class MOD1,MOD2,MOD3,MOD4,MOD5 modelNode
+  class WB,RAY_DASH obsNode
