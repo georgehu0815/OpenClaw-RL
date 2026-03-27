@@ -1,0 +1,155 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "background":         "#0D1117",
+    "primaryColor":       "#161B22",
+    "primaryTextColor":   "#E6EDF3",
+    "primaryBorderColor": "#30363D",
+    "lineColor":          "#8B949E",
+    "edgeLabelBackground":"#0D1117",
+    "clusterBkg":         "#13171F",
+    "clusterBorder":      "#30363D",
+    "fontFamily":         "ui-monospace, SFMono-Regular, monospace",
+    "fontSize":           "15px"
+  }
+}}%%
+
+flowchart TD
+
+%% ════════════════════════════════════════
+%%  ROW 0  —  DATASET
+%% ════════════════════════════════════════
+
+DS[("📂  sample_tasks.jsonl\ntask_name · instruction\ngrader script · docker_image")]
+
+%% ════════════════════════════════════════
+%%  ROW 1  —  TRAINING ORCHESTRATOR
+%% ════════════════════════════════════════
+
+subgraph ORCH["🔵  train_async.py  —  AsyncIO Event Loop"]
+    direction LR
+    TA["schedule ≤ MAX_CONCURRENT\ncoroutines · round-robin tasks"]
+    EP["run_episode①   run_episode②   …   run_episodeN\nasyncio.Task per concurrent episode"]
+    TA --> EP
+end
+
+DS -->|"task dict"| TA
+
+%% ════════════════════════════════════════
+%%  ROW 2  —  ENV POOL + AGENT + POLICY  (same rank)
+%% ════════════════════════════════════════
+
+subgraph TIER2["  "]
+    direction LR
+
+    subgraph POOL["🟠  local_env_pool.py  —  LocalEnvPool"]
+        direction TB
+        SEM["asyncio.Semaphore\nMAX_CONCURRENT slots\nallocate · exec · evaluate · close"]
+        IDLE["Idle Reaper\n60 s tick\nevict > IDLE_TIMEOUT"]
+        SEM -.-|"reap"| IDLE
+    end
+
+    subgraph TENV["🟠  terminal_env.py  —  TerminalEnv × N"]
+        direction TB
+        DC["docker run --rm -d\nubuntu:22.04 sleep infinity"]
+        EXEC["exec(bash_cmd)\ndocker exec → stdout+stderr\ncapped at 4 096 B"]
+        EVALN["evaluate(grader)\nbash → float  0.0–1.0"]
+        CLN["close()\ndocker rm -f\nsem.release()"]
+        DC --> EXEC --> EVALN --> CLN
+    end
+
+    subgraph AGENT["🟣  agent_loop.py  —  run_episode()"]
+        direction TB
+        MSG["① Build messages[]\nsystem prompt + history\n_trim_messages ≤ CONTEXT_LEN"]
+        CALLA["② POST /v1/chat/completions\nopenai.AsyncOpenAI client"]
+        PARSEA["③ parse_bash_cmd()\nextract bash block"]
+        DONEA["④ TASK_COMPLETE\nor MAX_TURNS → exit"]
+        MSG --> CALLA --> PARSEA
+        PARSEA -->|"loop"| MSG
+        PARSEA --> DONEA
+    end
+
+    subgraph POLICY["🟢  oMLX / mlx_lm  —  Policy Slot  :8080"]
+        direction TB
+        APIP["OpenAI-compat\n/v1/chat/completions"]
+        MDLP["Qwen3-8B-4bit  ≈ 5 GB\ncontinuous batching · KV cache"]
+        APIP --- MDLP
+    end
+
+end
+
+EP      -->|"allocate(task)"| SEM
+SEM     -->|"docker run → lease_id"| DC
+PARSEA  -->|"exec(lease, cmd)"| EXEC
+EXEC    -->|"stdout+stderr\nobservation"| PARSEA
+CALLA   -->|"messages[]"| APIP
+APIP    -->|"assistant content"| CALLA
+
+%% ════════════════════════════════════════
+%%  ROW 3  —  ROLLOUT BUFFER
+%% ════════════════════════════════════════
+
+subgraph BUF["🔵  rollout_buffer.py  —  RolloutBuffer"]
+    direction LR
+    ACCB["accumulate Trajectory\nN_SAMPLES_PER_PROMPT per task"]
+    GRPOB["GRPO Advantage\nAᵢ = 「rᵢ − μ」÷「σ + ε」\nnormalised within group"]
+    GBATCHB["GRPOBatch → asyncio.Queue\ntask_id · samples · advantages"]
+    ACCB --> GRPOB --> GBATCHB
+end
+
+DONEA   -->|"evaluate(lease)"| EVALN
+EVALN   -->|"score  0.0 – 1.0"| ACCB
+DONEA   -->|"Trajectory\nmessages · score · n_turns"| ACCB
+
+%% ════════════════════════════════════════
+%%  ROW 4  —  PRM + TRAINER  (same rank)
+%% ════════════════════════════════════════
+
+subgraph TIER4["  "]
+    direction LR
+
+    subgraph PRM["🟣  prm_client.py  —  PRMClient   ⟨optional · PRM_ENABLE=1⟩"]
+        direction TB
+        PRMP["POST /v1/chat/completions\nPRM Slot  :8081"]
+        MDLPRM["Qwen3-4B-4bit  ≈ 3 GB"]
+        VOTEP["majority vote  PRM_M\nper 「cmd, obs」step → float"]
+        PRMP --> MDLPRM --> VOTEP
+    end
+
+    subgraph TRAIN["🔴  mlx-tune  —  GRPOTrainer"]
+        direction TB
+        GRADT["GRPO gradient update\nApple Silicon  ·  MLX ops"]
+        LORAT["LoRA adapters\nrank = 16  ·  KL coef = 0.01  ·  type = k3"]
+        SYNCT["in-place weight sync\nMLX array update\nno serialisation"]
+        GRADT --> LORAT --> SYNCT
+    end
+
+end
+
+GBATCHB -.->|"score_trajectory(traj)\nif PRM_ENABLE=1"| PRMP
+VOTEP   -.->|"turn_scores[]"| GRPOB
+GBATCHB -->|"GRPOBatch\nadvantages · messages"| GRADT
+SYNCT   -->|"updated weights\nin-place MLX update"| MDLP
+
+%% ════════════════════════════════════════
+%%  NODE STYLES
+%% ════════════════════════════════════════
+
+classDef orch   fill:#0F2A5C,stroke:#4B8BDE,stroke-width:2px,color:#A8D8FF
+classDef env    fill:#3B1F00,stroke:#E07B39,stroke-width:2px,color:#FFD4A8
+classDef agnt   fill:#2B0F5C,stroke:#9B72DE,stroke-width:2px,color:#D8B4FF
+classDef pol    fill:#0F3B22,stroke:#4BAD6E,stroke-width:2px,color:#A8FFCC
+classDef buf    fill:#0F1F4A,stroke:#4B72DE,stroke-width:2px,color:#A8C8FF
+classDef prm    fill:#2E0F3B,stroke:#BB72DE,stroke-width:2px,color:#E8B4FF
+classDef train  fill:#3B0F0F,stroke:#DE4B4B,stroke-width:2px,color:#FFA8A8
+classDef data   fill:#2A2A10,stroke:#D4D44B,stroke-width:2px,color:#FFFFA8
+classDef spacer fill:#0D1117,stroke:#0D1117,color:#0D1117
+
+class TA,EP orch
+class SEM,IDLE,DC,EXEC,EVALN,CLN env
+class MSG,CALLA,PARSEA,DONEA agnt
+class APIP,MDLP pol
+class ACCB,GRPOB,GBATCHB buf
+class PRMP,MDLPRM,VOTEP prm
+class GRADT,LORAT,SYNCT train
+class DS data
