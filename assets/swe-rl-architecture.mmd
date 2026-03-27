@@ -1,0 +1,120 @@
+%%{
+  init: {
+    "theme": "base",
+    "themeVariables": {
+      "fontFamily": "Inter, Helvetica Neue, sans-serif",
+      "fontSize": "20px",
+      "primaryColor": "#0D2137",
+      "primaryTextColor": "#E8F4FD",
+      "primaryBorderColor": "#4FC3F7",
+      "lineColor": "#90CAF9",
+      "background": "#0A1929",
+      "mainBkg": "#0A1929",
+      "clusterBkg": "#0D2137",
+      "clusterBorder": "#4FC3F7",
+      "titleColor": "#E8F4FD",
+      "edgeLabelBackground": "#0D2137"
+    }
+  }
+}%%
+graph LR
+    DS["SWE-Bench\nSWE-Gym\nJSONL"]
+
+    subgraph head["GPU Head Node  (Ray Cluster · Slime)"]
+        direction TB
+
+        subgraph rollout["Rollout  (generate_with_swe_remote.py)"]
+            direction TB
+            AG["Agent Loop\n_run_agent_remote\nup to 20 turns"]
+            CM["Context Manager\nhead 30% + tail 70%\ntruncation"]
+            EC["swe_env_client\nHTTP async client"]
+        end
+
+        PO["SGLang Policy\nQwen3-32B / 8B\nlitellm acompletion"]
+
+        PS["Pool Server\n:18090\nleast-loaded routing"]
+
+        subgraph reward_tier["Reward"]
+            direction TB
+            EV["Patch Eval\nfresh container\ngit apply + pytest\n+1 resolved / -1 failed"]
+            PR["PRM\nswe_prm.py\nmajority vote x m\n(optional)"]
+        end
+
+        subgraph training["GRPO Training  (Megatron-LM)"]
+            direction TB
+            RB["Rollout Buffer\nn=8 per prompt\nadvantage A_i"]
+            MT["Megatron Actor\nGRPO loss\nKL penalty · LR 1e-6"]
+        end
+    end
+
+    subgraph ecs["ECS Docker Nodes  (1-N)"]
+        direction TB
+        ES["swe_exec_server.py\n:5000  per node"]
+        DC["Docker Containers\nPython repo · /testbed\n4GB RAM · 256 PIDs"]
+    end
+
+    subgraph obs["Artifacts"]
+        direction TB
+        WB["W&B"]
+        TR["traj.json\npatch.diff"]
+    end
+
+    DS -->|"problem_statement\n+ instance"| AG
+    AG <-->|"build context\ntruncate"| CM
+    AG <-->|"/v1/chat/completions\nbash tool call"| PO
+    AG -->|"exec_tool\n(bash cmd)"| EC
+    EC -->|"allocate · exec\ndiff · evaluate · close"| PS
+    PS -->|"route lease\nHTTP"| ES
+    ES <-->|"docker exec\nbash -lc"| DC
+    DC -->|"returncode\nstdout/stderr"| ES
+    ES -->|observation| PS
+    PS -->|observation| EC
+    EC -->|observation| AG
+    AG -->|"submit patch\nor git diff"| EV
+    AG <-->|"async step\nscoring"| PR
+    AG -->|"scored\ntrajectory"| RB
+    RB --> MT
+    MT -->|"weight sync"| PO
+    AG -->|metrics| WB
+    AG -->|rollout| TR
+
+    style head fill:#091825,stroke:#4FC3F7,stroke-width:3px,color:#E8F4FD
+    style ecs fill:#1A0808,stroke:#EF5350,stroke-width:3px,color:#FFCDD2
+    style obs fill:#0A180A,stroke:#66BB6A,stroke-width:2px,color:#C8E6C9
+    style rollout fill:#0A1F35,stroke:#00B4D8,stroke-width:2px,color:#CAF0F8
+    style reward_tier fill:#0A180A,stroke:#66BB6A,stroke-width:2px,color:#C8E6C9
+    style training fill:#160A28,stroke:#9C27B0,stroke-width:2px,color:#F3E5F5
+
+    style DS fill:#1B5E20,stroke:#4CAF50,stroke-width:2px,color:#E8F5E9
+    style AG fill:#006278,stroke:#00B4D8,stroke-width:2px,color:#CAF0F8
+    style CM fill:#004D6D,stroke:#00B4D8,stroke-width:2px,color:#CAF0F8
+    style EC fill:#004D6D,stroke:#00B4D8,stroke-width:2px,color:#CAF0F8
+    style PO fill:#1A237E,stroke:#7986CB,stroke-width:2px,color:#E8EAF6
+    style PS fill:#0D3A0D,stroke:#66BB6A,stroke-width:2px,color:#C8E6C9
+    style EV fill:#1B3A1B,stroke:#66BB6A,stroke-width:2px,color:#C8E6C9
+    style PR fill:#7B3F00,stroke:#F59E0B,stroke-width:2px,color:#FEF3C7
+    style RB fill:#1A237E,stroke:#7986CB,stroke-width:2px,color:#E8EAF6
+    style MT fill:#4A148C,stroke:#CE93D8,stroke-width:2px,color:#F3E5F5
+    style ES fill:#7F1717,stroke:#EF5350,stroke-width:2px,color:#FFCDD2
+    style DC fill:#5C1010,stroke:#EF9A9A,stroke-width:2px,color:#FFCDD2
+    style WB fill:#1B3A1B,stroke:#66BB6A,stroke-width:2px,color:#C8E6C9
+    style TR fill:#1B3A1B,stroke:#66BB6A,stroke-width:2px,color:#C8E6C9
+
+    linkStyle 0 stroke:#4CAF50,stroke-width:2px
+    linkStyle 1 stroke:#00B4D8,stroke-width:2px
+    linkStyle 2 stroke:#7986CB,stroke-width:3px
+    linkStyle 3 stroke:#66BB6A,stroke-width:2px
+    linkStyle 4 stroke:#66BB6A,stroke-width:2px
+    linkStyle 5 stroke:#EF5350,stroke-width:2px
+    linkStyle 6 stroke:#EF9A9A,stroke-width:2px
+    linkStyle 7 stroke:#EF9A9A,stroke-width:2px
+    linkStyle 8 stroke:#EF5350,stroke-width:2px
+    linkStyle 9 stroke:#66BB6A,stroke-width:2px
+    linkStyle 10 stroke:#66BB6A,stroke-width:2px
+    linkStyle 11 stroke:#66BB6A,stroke-width:2px
+    linkStyle 12 stroke:#F59E0B,stroke-width:2px
+    linkStyle 13 stroke:#7986CB,stroke-width:2px
+    linkStyle 14 stroke:#CE93D8,stroke-width:2px
+    linkStyle 15 stroke:#CE93D8,stroke-width:3px
+    linkStyle 16 stroke:#66BB6A,stroke-width:1px
+    linkStyle 17 stroke:#66BB6A,stroke-width:1px
