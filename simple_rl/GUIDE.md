@@ -32,6 +32,24 @@
 ## 1. Architecture Overview
 
 ```
+Architecture
+────────────
+  dataset (JSONL)
+      │
+      ▼
+  Async RL Loop   ── dispatches tasks ──▶  AgentLoop × MAX_CONCURRENT
+      │                                        │
+      │                               LocalEnvPool (Docker)
+      │                                        │
+      ◀── Trajectory (messages + score) ───────┘
+      │
+      ▼
+  RolloutBuffer  (asyncio.Queue)
+      │   accumulate N_SAMPLES_PER_PROMPT per task
+      │   compute GRPO advantages
+      ▼
+  GRPOBatch  ──▶  _submit_to_mlx_tune()  [stub — wire to mlx-tune]
+  
 ┌─────────────────────────────────────────────────────────┐
 │                      train_async.py                     │
 │   asyncio event loop  —  no Ray, no remote workers      │
@@ -82,7 +100,7 @@ Environment Layer
     └─ TerminalEnv
         (Docker container per episode)
 
-        
+
 ```
 flowchart TD
 

@@ -52,11 +52,12 @@ class PRMClient:
         self,
         prm_url: str = config.PRM_URL,
         prm_model: str = config.PRM_MODEL,
+        prm_api_key: str = config.PRM_API_KEY,
         m: int = config.PRM_M,
     ) -> None:
         self._model = prm_model
         self._m = m
-        self._client = openai.AsyncOpenAI(base_url=prm_url, api_key="none")
+        self._client = openai.AsyncOpenAI(base_url=prm_url, api_key=prm_api_key)
 
     # ── Public API ─────────────────────────────────────────────────────────────
 

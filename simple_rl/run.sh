@@ -18,17 +18,34 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+
+# === simple-rl startup ===
+# [✓] Docker daemon reachable
+# [✓] Policy server reachable at http://localhost:8080/v1
+
+# Configuration:
+#   POLICY_URL       = http://localhost:8080/v1
+#   POLICY_MODEL     = Qwen3.5-0.8B-8bit
+#   MAX_CONCURRENT   = 4
+#   N_SAMPLES        = 8
+#   ROLLOUT_BATCH    = 4
+#   MAX_TURNS        = 20
+#   DATASET          = /Volumes/ExternalSSD/train/OpenClaw-RL/simple_rl/data/sample_tasks.jsonl
+#   LOG_DIR          = /Volumes/ExternalSSD/train/OpenClaw-RL/simple_rl/logs
+
+
 # ── Defaults (override via env or args) ───────────────────────────────────────
 POLICY_URL="${POLICY_URL:-http://localhost:8080/v1}"
-POLICY_MODEL="${POLICY_MODEL:-Qwen3-8B-4bit}"
+POLICY_MODEL="${POLICY_MODEL:-Qwen3.5-0.8B-8bit}"
+# #   POLICY_MODEL     = Qwen3.5-0.8B-8bit
 MAX_CONCURRENT="${MAX_CONCURRENT:-4}"
 N_SAMPLES="${N_SAMPLES:-8}"
 ROLLOUT_BATCH="${ROLLOUT_BATCH:-4}"
 MAX_TURNS="${MAX_TURNS:-20}"
 LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/logs}"
 DATASET="${DATASET:-$SCRIPT_DIR/data/sample_tasks.jsonl}"
-MAX_ROUNDS=0   # 0 = run forever
-
+MAX_ROUNDS=10   # 0 = run forever
+        # --max_rounds 100
 DRY_RUN=0
 PRM_FLAG=""
 

@@ -1,0 +1,69 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "background":         "#0D1117",
+    "primaryColor":       "#161B22",
+    "primaryTextColor":   "#E6EDF3",
+    "primaryBorderColor": "#30363D",
+    "lineColor":          "#8B949E",
+    "edgeLabelBackground":"#0D1117",
+    "clusterBkg":         "#13171F",
+    "clusterBorder":      "#21262D",
+    "fontFamily":         "ui-monospace, SFMono-Regular, monospace",
+    "fontSize":           "18px"
+  }
+}}%%
+
+flowchart LR
+
+%% ── nodes ──────────────────────────────────────────────────
+
+DS[("📂 Task Dataset<br/>sample_tasks.jsonl")]
+
+ORCH["🔵 Orchestrator<br/>train_async.py"]
+
+ENV["🟠 Env Pool<br/>local_env_pool.py<br/>terminal_env.py"]
+
+AGENT["🟣 Agent Loop<br/>agent_loop.py"]
+
+POLICY["🟢 Policy Server<br/>oMLX  :8080<br/>Qwen3-8B-4bit"]
+
+BUF["🔵 Rollout Buffer<br/>rollout_buffer.py<br/>GRPO advantage"]
+
+PRM["🟣 PRM  ⟨opt⟩<br/>prm_client.py<br/>oMLX  :8081"]
+
+TRAIN["🔴 Trainer<br/>mlx-tune<br/>GRPOTrainer"]
+
+%% ── edges ──────────────────────────────────────────────────
+
+DS      -->|"tasks"| ORCH
+ORCH    -->|"allocate"| ENV
+ENV     -->|"observation"| AGENT
+AGENT   -->|"bash cmd"| ENV
+AGENT   -->|"messages"| POLICY
+POLICY  -->|"response"| AGENT
+ENV     -->|"score + trajectory"| BUF
+BUF     -.->|"step scores"| PRM
+PRM     -.->|"turn scores"| BUF
+BUF     -->|"GRPO batch"| TRAIN
+TRAIN   -->|"weight sync"| POLICY
+
+%% ── styles ─────────────────────────────────────────────────
+
+classDef orch   fill:#0F2A5C,stroke:#4B8BDE,stroke-width:3px,color:#A8D8FF
+classDef env    fill:#3B1F00,stroke:#E07B39,stroke-width:3px,color:#FFD4A8
+classDef agnt   fill:#2B0F5C,stroke:#9B72DE,stroke-width:3px,color:#D8B4FF
+classDef pol    fill:#0F3B22,stroke:#4BAD6E,stroke-width:3px,color:#A8FFCC
+classDef buf    fill:#0F1F4A,stroke:#4B72DE,stroke-width:3px,color:#A8C8FF
+classDef prm    fill:#2E0F3B,stroke:#BB72DE,stroke-width:3px,color:#E8B4FF
+classDef train  fill:#3B0F0F,stroke:#DE4B4B,stroke-width:3px,color:#FFA8A8
+classDef data   fill:#2A2A10,stroke:#D4D44B,stroke-width:3px,color:#FFFFA8
+
+class ORCH orch
+class ENV env
+class AGENT agnt
+class POLICY pol
+class BUF buf
+class PRM prm
+class TRAIN train
+class DS data

@@ -5,12 +5,19 @@ All values are overridable via environment variables.
 import os
 
 # ── Policy model (oMLX OpenAI-compat server) ──────────────────────────────────
-POLICY_URL   = os.getenv("POLICY_URL",   "http://localhost:8080/v1")
-POLICY_MODEL = os.getenv("POLICY_MODEL", "Qwen3-8B-4bit")
+POLICY_URL    = os.getenv("POLICY_URL",    "http://localhost:8080/v1")
+POLICY_MODEL  = os.getenv("POLICY_MODEL",  "Qwen3.5-0.8B-8bit")
+POLICY_API_KEY = os.getenv("POLICY_API_KEY", "1111")  # match --api-key on the server
+# oMLX processes one request at a time; keep concurrent policy calls ≤ this.
+POLICY_MAX_CONCURRENT = int(os.getenv("POLICY_MAX_CONCURRENT", "1"))
+# Retry policy: max attempts and initial backoff (seconds) on 5xx errors.
+POLICY_MAX_RETRIES    = int(os.getenv("POLICY_MAX_RETRIES",    "3"))
+POLICY_RETRY_BACKOFF  = float(os.getenv("POLICY_RETRY_BACKOFF", "2.0"))
 
 # ── PRM model (optional step-scoring slot) ────────────────────────────────────
-PRM_URL    = os.getenv("PRM_URL",    "http://localhost:8081/v1")
-PRM_MODEL  = os.getenv("PRM_MODEL",  "Qwen3-4B-4bit")
+PRM_URL     = os.getenv("PRM_URL",     "http://localhost:8081/v1")
+PRM_MODEL   = os.getenv("PRM_MODEL",   "Qwen3.5-0.8B-8bit")
+PRM_API_KEY = os.getenv("PRM_API_KEY", "1111")  # match --api-key on the PRM server
 PRM_ENABLE = bool(int(os.getenv("PRM_ENABLE", "0")))
 PRM_M      = int(os.getenv("PRM_M", "3"))          # majority-vote count per step
 

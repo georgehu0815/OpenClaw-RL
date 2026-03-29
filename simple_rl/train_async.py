@@ -28,8 +28,8 @@ Usage
     python -m simple_rl.train_async \\
         --dataset data/sample_tasks.jsonl \\
         --policy_url http://localhost:8080/v1 \\
-        --policy_model Qwen3-8B-4bit \\
-        --max_concurrent 4 \\
+        --policy_model Qwen3.5-0.8B-8bit \\
+        --max_concurrent 1 \\
         --n_samples 8 \\
         --rollout_batch_size 4 \\
         --max_turns 20 \\
@@ -132,6 +132,7 @@ async def train(
     dataset_path: str        = config.DATASET_PATH,
     policy_url: str          = config.POLICY_URL,
     policy_model: str        = config.POLICY_MODEL,
+    policy_api_key: str      = config.POLICY_API_KEY,
     max_concurrent: int      = config.MAX_CONCURRENT,
     n_samples_per_prompt: int = config.N_SAMPLES_PER_PROMPT,
     rollout_batch_size: int  = config.ROLLOUT_BATCH_SIZE,
@@ -204,6 +205,7 @@ async def train(
                         env_pool,
                         policy_url=policy_url,
                         policy_model=policy_model,
+                        policy_api_key=policy_api_key,
                         max_turns=max_turns,
                     ),
                     name=f"episode-{step}",
@@ -291,6 +293,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--dataset",            default=config.DATASET_PATH)
     p.add_argument("--policy_url",         default=config.POLICY_URL)
     p.add_argument("--policy_model",       default=config.POLICY_MODEL)
+    p.add_argument("--policy_api_key",     default=config.POLICY_API_KEY)
     p.add_argument("--max_concurrent",     type=int,   default=config.MAX_CONCURRENT)
     p.add_argument("--n_samples",          type=int,   default=config.N_SAMPLES_PER_PROMPT,
                    dest="n_samples_per_prompt")
@@ -311,6 +314,7 @@ def main() -> None:
             dataset_path=args.dataset,
             policy_url=args.policy_url,
             policy_model=args.policy_model,
+            policy_api_key=args.policy_api_key,
             max_concurrent=args.max_concurrent,
             n_samples_per_prompt=args.n_samples_per_prompt,
             rollout_batch_size=args.rollout_batch_size,

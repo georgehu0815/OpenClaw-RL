@@ -23,6 +23,7 @@ budget.  The system prompt and first user turn are always kept.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -32,6 +33,16 @@ from typing import Any, Dict, List, Optional
 import openai
 
 from . import config
+
+# Limit simultaneous in-flight requests to the policy server.
+# oMLX processes one request at a time; concurrent requests cause 500s.
+_POLICY_SEMAPHORE: Optional[asyncio.Semaphore] = None
+
+def _get_policy_semaphore() -> asyncio.Semaphore:
+    global _POLICY_SEMAPHORE
+    if _POLICY_SEMAPHORE is None:
+        _POLICY_SEMAPHORE = asyncio.Semaphore(config.POLICY_MAX_CONCURRENT)
+    return _POLICY_SEMAPHORE
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +151,7 @@ async def run_episode(
     env_pool,                              # LocalEnvPool instance
     policy_url: str = config.POLICY_URL,
     policy_model: str = config.POLICY_MODEL,
+    policy_api_key: str = config.POLICY_API_KEY,
     max_turns: int = config.MAX_TURNS,
     context_len: int = config.CONTEXT_LEN,
     temperature: float = 0.7,
@@ -152,7 +164,7 @@ async def run_episode(
     traj = Trajectory(task=task)
     t0 = time.monotonic()
 
-    client = openai.AsyncOpenAI(base_url=policy_url, api_key="none")
+    client = openai.AsyncOpenAI(base_url=policy_url, api_key=policy_api_key)
 
     instruction = task.get("instruction") or task.get("prompt") or str(task)
     messages: List[Dict[str, Any]] = [
@@ -165,18 +177,36 @@ async def run_episode(
         lease_id = await env_pool.allocate(task)
 
         for turn in range(max_turns):
-            # ── Policy call ──────────────────────────────────────────────────
+            # ── Policy call (semaphore-guarded, with retry on 5xx) ───────────
             trimmed = _trim_messages(messages, budget=context_len)
-            try:
-                resp = await client.chat.completions.create(
-                    model=policy_model,
-                    messages=trimmed,
-                    max_tokens=1024,
-                    temperature=temperature,
-                )
-            except openai.OpenAIError as exc:
-                traj.error = f"Policy API error on turn {turn}: {exc}"
-                logger.error("Policy error: %s", exc)
+            resp = None
+            backoff = config.POLICY_RETRY_BACKOFF
+            for attempt in range(config.POLICY_MAX_RETRIES):
+                try:
+                    async with _get_policy_semaphore():
+                        resp = await client.chat.completions.create(
+                            model=policy_model,
+                            messages=trimmed,
+                            max_tokens=1024,
+                            temperature=temperature,
+                        )
+                    break  # success
+                except openai.InternalServerError as exc:
+                    if attempt + 1 < config.POLICY_MAX_RETRIES:
+                        logger.warning(
+                            "Policy 500 on turn %d (attempt %d/%d), retrying in %.1fs",
+                            turn, attempt + 1, config.POLICY_MAX_RETRIES, backoff,
+                        )
+                        await asyncio.sleep(backoff)
+                        backoff *= 2
+                    else:
+                        traj.error = f"Policy API error on turn {turn}: {exc}"
+                        logger.error("Policy error (all retries exhausted): %s", exc)
+                except openai.OpenAIError as exc:
+                    traj.error = f"Policy API error on turn {turn}: {exc}"
+                    logger.error("Policy error: %s", exc)
+                    break
+            if traj.error or resp is None:
                 break
 
             choice = resp.choices[0]
