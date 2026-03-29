@@ -1,32 +1,29 @@
-./export-weights-bias.sh
-POLICY_URL=http://localhost:8080/v1 PRM_ENABLE=1 bash simple_rl/run.sh
-# --dry-run for a quick test (2 rounds, no real LLM)
-# export WANDB_KEY="your-wandb-key"
-# ./run_training.sh 
-# === simple-rl startup ===
-# [✓] Docker daemon reachable
-# [✓] Policy server reachable at http://localhost:8080/v1
+#!/usr/bin/env bash
+# run_training.sh — Launch simple-rl online RL training with GRPO + W&B
+#
+# Usage:
+#   bash run_training.sh            # full training
+#   bash run_training.sh --dry-run  # 2 rounds, no real LLM needed
 
-# Configuration:
-#   POLICY_URL       = http://localhost:8080/v1
-#   POLICY_MODEL     = Qwen3-8B-4bit
-#   MAX_CONCURRENT   = 4
-#   N_SAMPLES        = 8
-#   ROLLOUT_BATCH    = 4
-#   MAX_TURNS        = 20
-#   DATASET          = /Volumes/ExternalSSD/train/OpenClaw-RL/simple_rl/data/sample_tasks.jsonl
-#   LOG_DIR          = /Volumes/ExternalSSD/train/OpenClaw-RL/simple_rl/logs
+set -euo pipefail
 
+# ── W&B credentials ───────────────────────────────────────────────────────────
+# Copy your key from https://wandb.ai/authorize
+export WANDB_API_KEY="your-wandb-key-here"
+export WANDB_PROJECT="terminal-rl-simple"
+export WANDB_ENTITY="bochuxt7-iot"
 
-# wandb: [wandb.login()] Using explicit session credentials for https://api.wandb.ai.
-# wandb: No netrc file found, creating one.
-# wandb: Appending key for api.wandb.ai to your netrc file: /Users/ghu/.netrc
-# wandb: Currently logged in as: bochuxt7 (bochuxt7-iot) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
-# wandb: Tracking run with wandb version 0.25.1
-# wandb: Run data is saved locally in /Volumes/ExternalSSD/train/OpenClaw-RL/wandb/run-20260329_154334-lv7f7cuj
-# wandb: Run `wandb offline` to turn off syncing.
-# wandb: Syncing run pleasant-wildflower-1
-# wandb: ⭐️ View project at https://wandb.ai/bochuxt7-iot/terminal-rl-simple
-# wandb: 🚀 View run at https://wandb.ai/bochuxt7-iot/terminal-rl-simple/runs/lv7f7cuj
+# ── GRPO training (set POLICY_MODEL_PATH to enable real gradient updates) ─────
+export POLICY_MODEL_PATH="mlx-community/Qwen3.5-0.8B-8bit"  # must match POLICY_MODEL below
+export MLX_TUNE_PYTHON="/Volumes/ExternalSSD/train/mlx-tune/.venv/bin/python3"
+export GRPO_LORA_RANK="16"
+export GRPO_LR="1e-6"
+export GRPO_NUM_GEN="4"
 
-# https://wandb.ai/bochuxt7-iot/terminal-rl-simple/runs/lv7f7cuj?nw=nwuserbochuxt7
+# ── Policy server ─────────────────────────────────────────────────────────────
+export POLICY_URL="http://localhost:8080/v1"
+export POLICY_MODEL="Qwen3.5-0.8B-8bit"
+export POLICY_MAX_CONCURRENT="1"   # oMLX handles one request at a time
+
+# ── Launch (pass --prm to enable per-step PRM scoring) ────────────────────────
+POLICY_URL="$POLICY_URL" bash simple_rl/run.sh --prm "$@"

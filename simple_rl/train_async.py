@@ -226,6 +226,9 @@ async def train(
         prm = PRMClient(log_dir=log_dir)
         logger.info("PRM scoring enabled (model=%s, m=%d, log=%s/prm_steps.jsonl)",
                     config.PRM_MODEL, config.PRM_M, log_dir)
+    else:
+        logger.info("PRM scoring disabled.")
+        print("\n\n==PRM scoring disabled. To enable, set prm_enable and configure PRM_URL, PRM_MODEL, etc. in config.py - train_async.py:231")
 
     env_pool = LocalEnvPool(max_concurrent=max_concurrent)
     await env_pool.start()
@@ -298,9 +301,9 @@ async def train(
                         "completion_tokens": traj.completion_tokens,
                         "step":              step,
                     })
-                    print(f"\n\n====W&B logged step {step} with score {traj.score:.3f} - train_async.py:286")
+                    print(f"\n\n====W&B logged step {step} with score {traj.score:.3f} - train_async.py:304")
                 else:
-                    print(f"\n\n====W&B not available, but would have logged step {step} with score {traj.score:.3f} - train_async.py:288")
+                    print(f"\n\n====W&B not available, but would have logged step {step} with score {traj.score:.3f} - train_async.py:306")
 
                 # Buffer
                 batch = await buffer.add(task_id, traj, prm)
@@ -331,7 +334,7 @@ async def train(
                 if _WANDB_AVAILABLE and wandb_project:
                     _wandb.log({"round_mean_score": mean_score, "round": round_num})
                 else:
-                    print(f"\n\n====W&B not available, but would have logged round {round_num} with mean_score {mean_score:.3f} - train_async.py:319")
+                    print(f"\n\n====W&B not available, but would have logged round {round_num} with mean_score {mean_score:.3f} - train_async.py:337")
 
     except KeyboardInterrupt:
         logger.info("Interrupted by user.")

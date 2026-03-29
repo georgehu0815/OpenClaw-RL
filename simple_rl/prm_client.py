@@ -24,6 +24,7 @@ Each line (one per agent turn):
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -35,6 +36,18 @@ import openai
 
 from . import config
 from .agent_loop import Trajectory
+
+# Serialize all PRM requests globally — the omlx server crashes when it tries
+# to batch concurrent requests with different sequence lengths (broadcast_shapes
+# error).  One in-flight request at a time keeps it happy.
+_PRM_SEM: asyncio.Semaphore | None = None
+
+
+def _get_sem() -> asyncio.Semaphore:
+    global _PRM_SEM
+    if _PRM_SEM is None:
+        _PRM_SEM = asyncio.Semaphore(1)
+    return _PRM_SEM
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +107,9 @@ class PRMClient:
             self._log_path = Path(log_dir) / "prm_steps.jsonl"
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
             logger.info("PRM step log: %s (session=%s)", self._log_path, self._session)
+        else:
+            logger.info("PRM step logging disabled (no log_dir set).")
+            print("\n\n==PRM step logging disabled. To enable, set log_dir in config.py and pass log_dir to PRMClient\n\n - prm_client.py:112")
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -115,21 +131,28 @@ class PRMClient:
             output=output[:600],
         )
         votes: List[float] = []
-        for _ in range(self._m):
+        # Single request with n=m avoids flooding the server with M separate
+        # calls per step.  The semaphore ensures only one PRM request is
+        # in-flight at a time, preventing the KV-cache broadcast_shapes crash
+        # that occurs when the omlx server batches requests with different
+        # sequence lengths.
+        async with _get_sem():
             try:
                 resp = await self._client.chat.completions.create(
                     model=self._model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=8,
                     temperature=0.3,
+                    n=self._m,
                 )
-                text = (resp.choices[0].message.content or "").strip()
-                for tok in text.split():
-                    try:
-                        votes.append(max(0.0, min(1.0, float(tok))))
-                        break
-                    except ValueError:
-                        continue
+                for choice in resp.choices:
+                    text = (choice.message.content or "").strip()
+                    for tok in text.split():
+                        try:
+                            votes.append(max(0.0, min(1.0, float(tok))))
+                            break
+                        except ValueError:
+                            continue
             except Exception as exc:
                 logger.warning("PRM sample failed: %s", exc)
 
