@@ -8,7 +8,7 @@ __pycache__/
 logs
 .DS_Store
 
-
+export-weights-bias.sh
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

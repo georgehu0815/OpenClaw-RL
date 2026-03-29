@@ -1,0 +1,44 @@
+_wandb:
+    value:
+        cli_version: 0.25.1
+        e:
+            4v1qacplyqh5fsggfbqrtgd5kx95yqbk:
+                args:
+                    - simple_rl/tests/test_wandb.py
+                    - -m
+                    - integration
+                    - -v
+                    - -s
+                email: bochuxt7@gmail.com
+                executable: /usr/local/bin/python3
+                git:
+                    commit: 6e45c6d69c11f7dd1a70435cd5a07809dcd900ff
+                    remote: https://github.com/georgehu0815/OpenClaw-RL.git
+                host: Mac.home
+                os: macOS-15.7.4-arm64-arm-64bit
+                program: /Library/Frameworks/Python.framework/Versions/3.12/bin/pytest
+                python: CPython 3.12.10
+                root: /Volumes/ExternalSSD/train/OpenClaw-RL
+                startedAt: "2026-03-29T19:45:29.484640Z"
+                writerId: 4v1qacplyqh5fsggfbqrtgd5kx95yqbk
+        m: []
+        python_version: 3.12.10
+        t:
+            "1":
+                - 95
+                - 105
+            "2":
+                - 95
+                - 105
+            "3":
+                - 2
+                - 15
+                - 16
+            "4": 3.12.10
+            "5": 0.25.1
+            "10":
+                - 21
+            "12": 0.25.1
+            "13": darwin-arm64
+test:
+    value: true

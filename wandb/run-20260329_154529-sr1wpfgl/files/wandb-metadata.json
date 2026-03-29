@@ -1,0 +1,22 @@
+{
+  "os": "macOS-15.7.4-arm64-arm-64bit",
+  "python": "CPython 3.12.10",
+  "startedAt": "2026-03-29T19:45:29.484640Z",
+  "args": [
+    "simple_rl/tests/test_wandb.py",
+    "-m",
+    "integration",
+    "-v",
+    "-s"
+  ],
+  "program": "/Library/Frameworks/Python.framework/Versions/3.12/bin/pytest",
+  "git": {
+    "remote": "https://github.com/georgehu0815/OpenClaw-RL.git",
+    "commit": "6e45c6d69c11f7dd1a70435cd5a07809dcd900ff"
+  },
+  "email": "bochuxt7@gmail.com",
+  "root": "/Volumes/ExternalSSD/train/OpenClaw-RL",
+  "host": "Mac.home",
+  "executable": "/usr/local/bin/python3",
+  "writerId": "4v1qacplyqh5fsggfbqrtgd5kx95yqbk"
+}

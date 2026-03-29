@@ -41,4 +41,6 @@ LORA_RANK            = int(os.getenv("LORA_RANK",            "16"))
 # ── Data / logging ────────────────────────────────────────────────────────────
 DATASET_PATH  = os.getenv("DATASET_PATH",  "data/sample_tasks.jsonl")
 LOG_DIR       = os.getenv("LOG_DIR",       "logs")
-WANDB_PROJECT = os.getenv("WANDB_PROJECT", "")   # empty = disable W&B
+WANDB_PROJECT = os.getenv("WANDB_PROJECT", "terminal-rl-simple")   # empty = disable W&B
+WANDB_ENTITY  = os.getenv("WANDB_ENTITY",  "bochuxt7-iot")
+WANDB_API_KEY = os.getenv("WANDB_API_KEY", "")   # set via env; do not hardcode

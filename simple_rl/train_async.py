@@ -140,6 +140,8 @@ async def train(
     prm_enable: bool         = config.PRM_ENABLE,
     log_dir: str             = config.LOG_DIR,
     wandb_project: str       = config.WANDB_PROJECT,
+    wandb_entity: str        = config.WANDB_ENTITY,
+    wandb_api_key: str       = config.WANDB_API_KEY,
     max_rounds: int          = 0,   # 0 = run forever
 ) -> None:
     logging.basicConfig(
@@ -152,8 +154,11 @@ async def train(
 
     # W&B
     if _WANDB_AVAILABLE and wandb_project:
+        if wandb_api_key:
+            _wandb.login(key=wandb_api_key)
         _wandb.init(
             project=wandb_project,
+            entity=wandb_entity or None,
             config={
                 "policy_model":        policy_model,
                 "n_samples_per_prompt": n_samples_per_prompt,
@@ -241,6 +246,9 @@ async def train(
                         "completion_tokens": traj.completion_tokens,
                         "step":              step,
                     })
+                    print(f"\n\n====W&B logged step {step} with score {traj.score:.3f} - train_async.py:249")
+                else:
+                    print(f"\n\n====W&B not available, but would have logged step {step} with score {traj.score:.3f} - train_async.py:251")
 
                 # Buffer
                 batch = await buffer.add(task_id, traj, prm)
@@ -264,6 +272,8 @@ async def train(
 
                 if _WANDB_AVAILABLE and wandb_project:
                     _wandb.log({"round_mean_score": mean_score, "round": round_num})
+                else:
+                    print(f"\n\n====W&B not available, but would have logged round {round_num} with mean_score {mean_score:.3f} - train_async.py:276")
 
     except KeyboardInterrupt:
         logger.info("Interrupted by user.")
@@ -302,6 +312,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--prm_enable",         action="store_true")
     p.add_argument("--log_dir",            default=config.LOG_DIR)
     p.add_argument("--wandb_project",      default=config.WANDB_PROJECT)
+    p.add_argument("--wandb_entity",       default=config.WANDB_ENTITY)
+    p.add_argument("--wandb_api_key",      default=config.WANDB_API_KEY)
     p.add_argument("--max_rounds",         type=int,   default=0,
                    help="Stop after N training rounds (0 = run forever)")
     return p.parse_args()
@@ -322,6 +334,8 @@ def main() -> None:
             prm_enable=args.prm_enable,
             log_dir=args.log_dir,
             wandb_project=args.wandb_project,
+            wandb_entity=args.wandb_entity,
+            wandb_api_key=args.wandb_api_key,
             max_rounds=args.max_rounds,
         )
     )

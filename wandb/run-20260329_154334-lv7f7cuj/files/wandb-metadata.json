@@ -1,0 +1,55 @@
+{
+  "os": "macOS-15.7.4-arm64-arm-64bit",
+  "python": "CPython 3.12.7",
+  "startedAt": "2026-03-29T19:43:34.580317Z",
+  "args": [
+    "--dataset",
+    "/Volumes/ExternalSSD/train/OpenClaw-RL/simple_rl/data/sample_tasks.jsonl",
+    "--policy_url",
+    "http://localhost:8080/v1",
+    "--policy_model",
+    "Qwen3.5-0.8B-8bit",
+    "--max_concurrent",
+    "4",
+    "--n_samples",
+    "8",
+    "--rollout_batch_size",
+    "4",
+    "--max_turns",
+    "20",
+    "--log_dir",
+    "/Volumes/ExternalSSD/train/OpenClaw-RL/simple_rl/logs",
+    "--max_rounds",
+    "10"
+  ],
+  "program": "-m simple_rl.train_async",
+  "git": {
+    "remote": "https://github.com/georgehu0815/OpenClaw-RL.git",
+    "commit": "6e45c6d69c11f7dd1a70435cd5a07809dcd900ff"
+  },
+  "email": "bochuxt7@gmail.com",
+  "root": "/Volumes/ExternalSSD/train/OpenClaw-RL",
+  "host": "Mac.home",
+  "executable": "/Volumes/ExternalSSD/train/OpenClaw-RL/.venv/bin/python3",
+  "cpu_count": 14,
+  "cpu_count_logical": 14,
+  "disk": {
+    "/": {
+      "total": "994662584320",
+      "used": "783143096320"
+    }
+  },
+  "memory": {
+    "total": "68719476736"
+  },
+  "apple": {
+    "name": "Apple M4 Pro",
+    "ecpuCores": 4,
+    "pcpuCores": 10,
+    "gpuCores": 20,
+    "memoryGb": 64,
+    "swapTotalBytes": "26843545600",
+    "ramTotalBytes": "68719476736"
+  },
+  "writerId": "mwfup1m89eyddb0qu3qor7t6pf824bci"
+}

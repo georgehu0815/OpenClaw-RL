@@ -49,7 +49,7 @@ Architecture
       │   compute GRPO advantages
       ▼
   GRPOBatch  ──▶  _submit_to_mlx_tune()  [stub — wire to mlx-tune]
-  
+
 ┌─────────────────────────────────────────────────────────┐
 │                      train_async.py                     │
 │   asyncio event loop  —  no Ray, no remote workers      │
@@ -316,6 +316,11 @@ docker run --rm ubuntu:22.04 bash -c "
 # Download seta_env dataset
 python3 terminal-rl/data_utils/download.py seta_env
 
+DATASET_DIR=./terminal-rl/dataset \
+python3 terminal-rl/data_utils/convert_task_to_dataset.py \
+  --tasks_dir ./terminal-rl/dataset/seta_env \
+  --output_dir ./simple_rl/data/seta_env_converted
+
 # Convert to JSONL
 DATASET_DIR=./terminal-rl/dataset \
 python3 terminal-rl/data_utils/convert_task_to_dataset.py \
@@ -342,7 +347,8 @@ mlx_lm.server \
   --host 0.0.0.0
 
 # Verify
-curl -s http://localhost:8080/v1/models | python3 -m json.tool
+curl -s http://localhost:8080/v1/models  | python3 -m json.tool
+curl -s http://localhost:8080/v1/models -H "Authorization: Bearer 1111" | python3 -m json.tool
 ```
 
 ### Option B — oMLX (for training with weight sync)
@@ -367,9 +373,10 @@ export POLICY_MODEL=<model-name-as-reported-by-/v1/models>
 
 ```bash
 curl -s http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer 1111" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "Qwen3-8B-4bit",
+    "model": "Qwen3.5-0.8B-8bit",
     "messages": [{"role":"user","content":"Say hello"}],
     "max_tokens": 20
   }' | python3 -c "import sys,json; print(json.load(sys.stdin)['choices'][0]['message']['content'])"
@@ -422,7 +429,7 @@ docker pull ubuntu:22.04
 docker run --rm ubuntu:22.04 bash -c "echo 'Docker OK'"
 
 # 4. Policy server reachable
-curl -s http://localhost:8080/v1/models | grep -o '"id":"[^"]*"'
+curl -s http://localhost:8080/v1/models -H "Authorization: Bearer 1111" | grep -o '"id":"[^"]*"'
 
 # 5. Python imports
 python3 -c "from simple_rl.agent_loop import run_episode; print('imports OK')"
@@ -454,6 +461,59 @@ PASSED test_rollout_buffer.py::TestRolloutBuffer::test_grpo_advantage_formula
 PASSED test_rollout_buffer.py::TestRolloutBuffer::test_independent_tasks_dont_mix
 ... (42 total)
 ```
+==================================================================================== test session starts ====================================================================================
+platform darwin -- Python 3.12.10, pytest-8.3.4, pluggy-1.5.0 -- /usr/local/bin/python3
+cachedir: .pytest_cache
+rootdir: /Volumes/ExternalSSD/train/OpenClaw-RL/simple_rl
+configfile: pytest.ini
+plugins: devtools-0.12.2, timeout-2.4.0, logfire-3.9.0, asyncio-1.3.0, anyio-4.7.0, docker-3.1.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 47 items / 5 deselected / 42 selected                                                                                                                                             
+
+simple_rl/tests/test_agent_loop.py::TestParseBashCmd::test_xml_tags <- ../simple-rl/tests/test_agent_loop.py PASSED                                                                   [  2%]
+simple_rl/tests/test_agent_loop.py::TestParseBashCmd::test_markdown_fence <- ../simple-rl/tests/test_agent_loop.py PASSED                                                             [  4%]
+simple_rl/tests/test_agent_loop.py::TestParseBashCmd::test_sh_fence <- ../simple-rl/tests/test_agent_loop.py PASSED                                                                   [  7%]
+simple_rl/tests/test_agent_loop.py::TestParseBashCmd::test_no_command <- ../simple-rl/tests/test_agent_loop.py PASSED                                                                 [  9%]
+simple_rl/tests/test_agent_loop.py::TestParseBashCmd::test_case_insensitive_tag <- ../simple-rl/tests/test_agent_loop.py PASSED                                                       [ 11%]
+simple_rl/tests/test_agent_loop.py::TestParseBashCmd::test_multiline_cmd <- ../simple-rl/tests/test_agent_loop.py PASSED                                                              [ 14%]
+simple_rl/tests/test_agent_loop.py::TestTrimMessages::test_within_budget <- ../simple-rl/tests/test_agent_loop.py PASSED                                                              [ 16%]
+simple_rl/tests/test_agent_loop.py::TestTrimMessages::test_trims_old_turns <- ../simple-rl/tests/test_agent_loop.py PASSED                                                            [ 19%]
+simple_rl/tests/test_agent_loop.py::TestTrimMessages::test_short_messages_unchanged <- ../simple-rl/tests/test_agent_loop.py PASSED                                                   [ 21%]
+simple_rl/tests/test_agent_loop.py::TestRunEpisode::test_task_complete_signal_ends_loop <- ../simple-rl/tests/test_agent_loop.py PASSED                                               [ 23%]
+simple_rl/tests/test_agent_loop.py::TestRunEpisode::test_max_turns_respected <- ../simple-rl/tests/test_agent_loop.py PASSED                                                          [ 26%]
+simple_rl/tests/test_agent_loop.py::TestRunEpisode::test_no_bash_cmd_returns_hint <- ../simple-rl/tests/test_agent_loop.py PASSED                                                     [ 28%]
+simple_rl/tests/test_agent_loop.py::TestRunEpisode::test_policy_error_records_and_returns <- ../simple-rl/tests/test_agent_loop.py PASSED                                             [ 30%]
+simple_rl/tests/test_agent_loop.py::TestRunEpisode::test_token_tracking <- ../simple-rl/tests/test_agent_loop.py PASSED                                                               [ 33%]
+simple_rl/tests/test_agent_loop.py::TestRunEpisode::test_close_called_on_exception <- ../simple-rl/tests/test_agent_loop.py PASSED                                                    [ 35%]
+simple_rl/tests/test_local_env_pool.py::TestLocalEnvPoolUnit::test_allocate_and_close <- ../simple-rl/tests/test_local_env_pool.py PASSED                                             [ 38%]
+simple_rl/tests/test_local_env_pool.py::TestLocalEnvPoolUnit::test_exec_delegates_to_env <- ../simple-rl/tests/test_local_env_pool.py PASSED                                          [ 40%]
+simple_rl/tests/test_local_env_pool.py::TestLocalEnvPoolUnit::test_evaluate_uses_task_grader <- ../simple-rl/tests/test_local_env_pool.py PASSED                                      [ 42%]
+simple_rl/tests/test_local_env_pool.py::TestLocalEnvPoolUnit::test_max_concurrent_blocks <- ../simple-rl/tests/test_local_env_pool.py PASSED                                          [ 45%]
+simple_rl/tests/test_local_env_pool.py::TestLocalEnvPoolUnit::test_unknown_lease_raises <- ../simple-rl/tests/test_local_env_pool.py PASSED                                           [ 47%]
+simple_rl/tests/test_local_env_pool.py::TestLocalEnvPoolUnit::test_stop_closes_all_containers <- ../simple-rl/tests/test_local_env_pool.py PASSED                                     [ 50%]
+simple_rl/tests/test_rollout_buffer.py::TestGRPOBatch::test_mean_score <- ../simple-rl/tests/test_rollout_buffer.py PASSED                                                            [ 52%]
+simple_rl/tests/test_rollout_buffer.py::TestGRPOBatch::test_mean_advantage <- ../simple-rl/tests/test_rollout_buffer.py PASSED                                                        [ 54%]
+simple_rl/tests/test_rollout_buffer.py::TestGRPOBatch::test_empty_batch <- ../simple-rl/tests/test_rollout_buffer.py PASSED                                                           [ 57%]
+simple_rl/tests/test_rollout_buffer.py::TestRolloutBuffer::test_returns_none_before_full <- ../simple-rl/tests/test_rollout_buffer.py PASSED                                          [ 59%]
+simple_rl/tests/test_rollout_buffer.py::TestRolloutBuffer::test_returns_batch_when_full <- ../simple-rl/tests/test_rollout_buffer.py PASSED                                           [ 61%]
+simple_rl/tests/test_rollout_buffer.py::TestRolloutBuffer::test_grpo_advantage_formula <- ../simple-rl/tests/test_rollout_buffer.py PASSED                                            [ 64%]
+simple_rl/tests/test_rollout_buffer.py::TestRolloutBuffer::test_grpo_advantage_identical_scores <- ../simple-rl/tests/test_rollout_buffer.py PASSED                                   [ 66%]
+simple_rl/tests/test_rollout_buffer.py::TestRolloutBuffer::test_independent_tasks_dont_mix <- ../simple-rl/tests/test_rollout_buffer.py PASSED                                        [ 69%]
+simple_rl/tests/test_rollout_buffer.py::TestRolloutBuffer::test_put_and_get_batch <- ../simple-rl/tests/test_rollout_buffer.py PASSED                                                 [ 71%]
+simple_rl/tests/test_rollout_buffer.py::TestRolloutBuffer::test_prm_scoring_called <- ../simple-rl/tests/test_rollout_buffer.py PASSED                                                [ 73%]
+simple_rl/tests/test_rollout_buffer.py::TestRolloutBuffer::test_queue_depth <- ../simple-rl/tests/test_rollout_buffer.py PASSED                                                       [ 76%]
+simple_rl/tests/test_terminal_env.py::TestTerminalEnvUnit::test_start_success <- ../simple-rl/tests/test_terminal_env.py PASSED                                                       [ 78%]
+simple_rl/tests/test_terminal_env.py::TestTerminalEnvUnit::test_start_failure_raises <- ../simple-rl/tests/test_terminal_env.py PASSED                                                [ 80%]
+simple_rl/tests/test_terminal_env.py::TestTerminalEnvUnit::test_exec_not_running <- ../simple-rl/tests/test_terminal_env.py PASSED                                                    [ 83%]
+simple_rl/tests/test_terminal_env.py::TestTerminalEnvUnit::test_exec_returns_output <- ../simple-rl/tests/test_terminal_env.py PASSED                                                 [ 85%]
+simple_rl/tests/test_terminal_env.py::TestTerminalEnvUnit::test_exec_timeout_returns_message <- ../simple-rl/tests/test_terminal_env.py PASSED                                        [ 88%]
+simple_rl/tests/test_terminal_env.py::TestTerminalEnvUnit::test_evaluate_parses_float <- ../simple-rl/tests/test_terminal_env.py PASSED                                               [ 90%]
+simple_rl/tests/test_terminal_env.py::TestTerminalEnvUnit::test_evaluate_clamps_to_01 <- ../simple-rl/tests/test_terminal_env.py PASSED                                               [ 92%]
+simple_rl/tests/test_terminal_env.py::TestTerminalEnvUnit::test_evaluate_no_float_returns_zero <- ../simple-rl/tests/test_terminal_env.py PASSED                                      [ 95%]
+simple_rl/tests/test_terminal_env.py::TestTerminalEnvUnit::test_close_not_running <- ../simple-rl/tests/test_terminal_env.py PASSED                                                   [ 97%]
+simple_rl/tests/test_terminal_env.py::TestTerminalEnvUnit::test_close_running <- ../simple-rl/tests/test_terminal_env.py PASSED                                                       [100%]
+
+=============================================================
 
 ---
 
@@ -541,7 +601,38 @@ with open('simple_rl/logs/grpo_batch_r0001.jsonl') as f:
         print(f\"task={s['task_id']:20s}  score={s['score']:.3f}  adv={s['advantage']:+.3f}  turns={s['n_turns']}\")
 "
 ```
-
+task=hello_file            score=1.000  adv=+1.208  turns=20
+task=hello_file            score=1.000  adv=+1.208  turns=20
+task=hello_file            score=1.000  adv=+1.208  turns=20
+task=hello_file            score=0.000  adv=-0.725  turns=0
+task=hello_file            score=0.000  adv=-0.725  turns=0
+task=hello_file            score=0.000  adv=-0.725  turns=0
+task=hello_file            score=0.000  adv=-0.725  turns=0
+task=hello_file            score=0.000  adv=-0.725  turns=0
+task=count_words           score=1.000  adv=+1.208  turns=20
+task=count_words           score=1.000  adv=+1.208  turns=20
+task=count_words           score=1.000  adv=+1.208  turns=20
+task=count_words           score=0.000  adv=-0.725  turns=0
+task=count_words           score=0.000  adv=-0.725  turns=0
+task=count_words           score=0.000  adv=-0.725  turns=0
+task=count_words           score=0.000  adv=-0.725  turns=0
+task=count_words           score=0.000  adv=-0.725  turns=0
+task=sorted_numbers        score=1.000  adv=+1.620  turns=20
+task=sorted_numbers        score=1.000  adv=+1.620  turns=20
+task=sorted_numbers        score=0.000  adv=-0.540  turns=20
+task=sorted_numbers        score=0.000  adv=-0.540  turns=0
+task=sorted_numbers        score=0.000  adv=-0.540  turns=0
+task=sorted_numbers        score=0.000  adv=-0.540  turns=0
+task=sorted_numbers        score=0.000  adv=-0.540  turns=0
+task=sorted_numbers        score=0.000  adv=-0.540  turns=0
+task=find_python           score=0.000  adv=+0.000  turns=20
+task=find_python           score=0.000  adv=+0.000  turns=20
+task=find_python           score=0.000  adv=+0.000  turns=16
+task=find_python           score=0.000  adv=+0.000  turns=0
+task=find_python           score=0.000  adv=+0.000  turns=0
+task=find_python           score=0.000  adv=+0.000  turns=0
+task=find_python           score=0.000  adv=+0.000  turns=0
+task=find_python           score=0.000  adv=+0.000  turns=0
 ---
 
 ## Step 9 — Full Training Run
@@ -570,6 +661,16 @@ LOG_DIR=simple_rl/logs                \
 WANDB_PROJECT=terminal-rl-simple      \  # leave empty to disable W&B
 bash simple_rl/run.sh
 ```
+
+Configuration:
+  POLICY_URL       = http://localhost:8080/v1
+  POLICY_MODEL     = Qwen3.5-0.8B-8bit
+  MAX_CONCURRENT   = 4
+  N_SAMPLES        = 8
+  ROLLOUT_BATCH    = 4
+  MAX_TURNS        = 20
+  DATASET          = /Volumes/ExternalSSD/train/OpenClaw-RL/simple_rl/data/sample_tasks.jsonl
+  LOG_DIR          = /Volumes/ExternalSSD/train/OpenClaw-RL/simple_rl/logs
 
 ### Run for a fixed number of rounds
 
