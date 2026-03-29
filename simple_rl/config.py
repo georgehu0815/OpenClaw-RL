@@ -44,3 +44,20 @@ LOG_DIR       = os.getenv("LOG_DIR",       "logs")
 WANDB_PROJECT = os.getenv("WANDB_PROJECT", "terminal-rl-simple")   # empty = disable W&B
 WANDB_ENTITY  = os.getenv("WANDB_ENTITY",  "bochuxt7-iot")
 WANDB_API_KEY = os.getenv("WANDB_API_KEY", "")   # set via env; do not hardcode
+
+# ── mlx-tune / GRPO training ──────────────────────────────────────────────────
+# Path to the mlx-tune venv python (owns mlx + mlx_tune imports)
+MLX_TUNE_PYTHON   = os.getenv(
+    "MLX_TUNE_PYTHON", "/Volumes/ExternalSSD/train/mlx-tune/.venv/bin/python3"
+)
+# HF model ID or local path for mlx-tune to load weights (empty = stub mode)
+POLICY_MODEL_PATH = os.getenv("POLICY_MODEL_PATH", "")
+# Output dir for LoRA adapters written by GRPOTrainer
+GRPO_OUTPUT_DIR   = os.getenv("GRPO_OUTPUT_DIR",   "logs/grpo_adapters")
+GRPO_LORA_RANK    = int(os.getenv("GRPO_LORA_RANK",    "16"))
+GRPO_LR           = float(os.getenv("GRPO_LR",          "1e-6"))
+GRPO_NUM_GEN      = int(os.getenv("GRPO_NUM_GEN",       "4"))
+GRPO_BETA         = float(os.getenv("GRPO_BETA",         "0.04"))
+GRPO_LOSS_TYPE    = os.getenv("GRPO_LOSS_TYPE",          "grpo")
+GRPO_MAX_STEPS    = int(os.getenv("GRPO_MAX_STEPS",      "-1"))   # -1 = auto from dataset
+GRPO_LOGGING_STEPS = int(os.getenv("GRPO_LOGGING_STEPS", "1"))

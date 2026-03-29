@@ -82,21 +82,35 @@ def load_dataset(path: str) -> List[dict]:
     return tasks
 
 
-# ── mlx-tune stub ──────────────────────────────────────────────────────────────
+# ── GRPO training submission ──────────────────────────────────────────────────
 
-def _submit_to_mlx_tune(batches: List[GRPOBatch], round_num: int, log_dir: str) -> None:
+# Tracks the adapter path produced by the most recent successful GRPO round so
+# the next round can resume from it rather than starting from the base model.
+_last_adapter_path: str = ""
+
+
+def _submit_to_mlx_tune(
+    batches:      List[GRPOBatch],
+    round_num:    int,
+    log_dir:      str,
+    wandb_run_id: Optional[str] = None,
+) -> None:
     """
-    Placeholder for weight update via mlx-tune GRPOTrainer.
+    Submit pre-collected GRPO batches to mlx-tune GRPOTrainer.
 
-    In production this function would:
-      1. Serialize the batch to a JSONL file (messages + advantages).
-      2. Call mlx-tune's Python API or subprocess to run a GRPO gradient step.
-      3. Wait for mlx-tune to signal weight sync completion (in-place MLX array update).
+    Always writes grpo_batch_r{N}.jsonl for inspection.  Then, if
+    POLICY_MODEL_PATH is set, launches grpo_worker.py under the mlx-tune venv
+    to run a real gradient update and log per-step losses to W&B.
 
-    For now it logs statistics and writes the batch to disk.
+    Adapter continuity: the adapter path from round N is passed to round N+1
+    so training accumulates across rounds rather than restarting from the base
+    model every time.
     """
+    global _last_adapter_path
+    from .mlx_grpo_bridge import run_grpo_update
+
     all_scores = [s.trajectory.score for b in batches for s in b.samples]
-    all_advs   = [s.advantage       for b in batches for s in b.samples]
+    all_advs   = [s.advantage        for b in batches for s in b.samples]
     n = len(all_scores)
     if n == 0:
         return
@@ -108,22 +122,59 @@ def _submit_to_mlx_tune(batches: List[GRPOBatch], round_num: int, log_dir: str) 
         round_num, n, mean_score, mean_adv,
     )
 
-    # Write batch to disk for offline inspection / future mlx-tune wiring
+    # ── Always write JSONL snapshot ───────────────────────────────────────────
     out_path = Path(log_dir) / f"grpo_batch_r{round_num:04d}.jsonl"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         for batch in batches:
             for sample in batch.samples:
                 record = {
-                    "task_id":   batch.task_id,
-                    "advantage": sample.advantage,
-                    "score":     sample.trajectory.score,
-                    "n_turns":   sample.trajectory.n_turns,
-                    "messages":  sample.trajectory.messages,
+                    "task_id":     batch.task_id,
+                    "advantage":   sample.advantage,
+                    "score":       sample.trajectory.score,
+                    "n_turns":     sample.trajectory.n_turns,
+                    "messages":    sample.trajectory.messages,
                     "turn_scores": sample.trajectory.turn_scores,
                 }
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
     logger.info("Batch written to %s", out_path)
+
+    # ── Launch real GRPOTrainer (if model path configured) ────────────────────
+    if _last_adapter_path:
+        logger.info("GRPO round %d: resuming from adapter %s", round_num, _last_adapter_path)
+
+    result = run_grpo_update(
+        batches=batches,
+        round_num=round_num,
+        log_dir=log_dir,
+        wandb_run_id=wandb_run_id,
+        prev_adapter_path=_last_adapter_path,
+    )
+
+    if result.is_stub:
+        logger.info(
+            "GRPO round %d: stub mode (set POLICY_MODEL_PATH to enable training)",
+            round_num,
+        )
+        return
+
+    if result.status == "success":
+        _last_adapter_path = result.adapter_path   # carry forward to next round
+        logger.info(
+            "GRPO round %d: adapter saved to %s | %d steps logged",
+            round_num, result.adapter_path, len(result.step_losses),
+        )
+        if _WANDB_AVAILABLE and config.WANDB_PROJECT and result.step_losses:
+            final_loss = result.step_losses[-1]["loss"]
+            _wandb.log({
+                "grpo/round":      round_num,
+                "grpo/final_loss": final_loss,
+                "grpo/adapter":    result.adapter_path,
+                "grpo/mean_score": mean_score,
+                "grpo/mean_adv":   mean_adv,
+            })
+    else:
+        logger.error("GRPO round %d failed: %s", round_num, result.error)
 
 
 # ── Main training loop ─────────────────────────────────────────────────────────
@@ -172,8 +223,9 @@ async def train(
     prm = None
     if prm_enable:
         from .prm_client import PRMClient
-        prm = PRMClient()
-        logger.info("PRM scoring enabled (model=%s, m=%d)", config.PRM_MODEL, config.PRM_M)
+        prm = PRMClient(log_dir=log_dir)
+        logger.info("PRM scoring enabled (model=%s, m=%d, log=%s/prm_steps.jsonl)",
+                    config.PRM_MODEL, config.PRM_M, log_dir)
 
     env_pool = LocalEnvPool(max_concurrent=max_concurrent)
     await env_pool.start()
@@ -246,9 +298,9 @@ async def train(
                         "completion_tokens": traj.completion_tokens,
                         "step":              step,
                     })
-                    print(f"\n\n====W&B logged step {step} with score {traj.score:.3f} - train_async.py:249")
+                    print(f"\n\n====W&B logged step {step} with score {traj.score:.3f} - train_async.py:286")
                 else:
-                    print(f"\n\n====W&B not available, but would have logged step {step} with score {traj.score:.3f} - train_async.py:251")
+                    print(f"\n\n====W&B not available, but would have logged step {step} with score {traj.score:.3f} - train_async.py:288")
 
                 # Buffer
                 batch = await buffer.add(task_id, traj, prm)
@@ -262,7 +314,13 @@ async def train(
                 train_batches = pending_batches[:rollout_batch_size]
                 pending_batches = pending_batches[rollout_batch_size:]
 
-                _submit_to_mlx_tune(train_batches, round_num, log_dir)
+                _wb_run_id = (
+                    _wandb.run.id
+                    if (_WANDB_AVAILABLE and wandb_project and _wandb.run)
+                    else None
+                )
+                _submit_to_mlx_tune(train_batches, round_num, log_dir,
+                                    wandb_run_id=_wb_run_id)
 
                 mean_score = sum(
                     s.trajectory.score
@@ -273,7 +331,7 @@ async def train(
                 if _WANDB_AVAILABLE and wandb_project:
                     _wandb.log({"round_mean_score": mean_score, "round": round_num})
                 else:
-                    print(f"\n\n====W&B not available, but would have logged round {round_num} with mean_score {mean_score:.3f} - train_async.py:276")
+                    print(f"\n\n====W&B not available, but would have logged round {round_num} with mean_score {mean_score:.3f} - train_async.py:319")
 
     except KeyboardInterrupt:
         logger.info("Interrupted by user.")

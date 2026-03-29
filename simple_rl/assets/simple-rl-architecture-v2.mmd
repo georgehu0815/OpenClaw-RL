@@ -1,0 +1,211 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "background":         "#0D1117",
+    "primaryColor":       "#161B22",
+    "primaryTextColor":   "#E6EDF3",
+    "primaryBorderColor": "#30363D",
+    "lineColor":          "#8B949E",
+    "edgeLabelBackground":"#0D1117",
+    "clusterBkg":         "#0D1320",
+    "clusterBorder":      "#30363D",
+    "fontFamily":         "ui-monospace, SFMono-Regular, monospace",
+    "fontSize":           "14px"
+  }
+}}%%
+
+flowchart TD
+
+%% ════════════════════════════════════════════════════════════════
+%%  ROW 0 — INPUTS
+%% ════════════════════════════════════════════════════════════════
+
+DS[("📂  sample_tasks.jsonl\ntask_name · instruction\ngrader · docker_image")]
+
+WB[("📊  Weights & Biases\nbochuxt7-iot / terminal-rl-simple\nscore · turns · grpo/loss · lora/*")]
+
+%% ════════════════════════════════════════════════════════════════
+%%  ROW 1 — TRAINING ORCHESTRATOR
+%% ════════════════════════════════════════════════════════════════
+
+subgraph ORCH["🔵  train_async.py  —  AsyncIO Event Loop"]
+    direction LR
+    TA["dispatch ≤ MAX_CONCURRENT tasks\nasyncio.Task × N  ·  round-robin"]
+    LAST_AP["_last_adapter_path\ncarried across rounds\n'' on round 1 → adapter/round_N after"]
+    TA ~~~ LAST_AP
+end
+
+DS -->|"task dicts"| TA
+
+%% ════════════════════════════════════════════════════════════════
+%%  ROW 2 — EPISODE EXECUTION  (3 subgraphs side-by-side)
+%% ════════════════════════════════════════════════════════════════
+
+subgraph TIER2["  "]
+    direction LR
+
+    subgraph POOL["🟠  LocalEnvPool"]
+        direction TB
+        SEM["asyncio.Semaphore\nMAX_CONCURRENT slots\nallocate · exec · evaluate · close"]
+        REAPER["Idle Reaper\n60 s tick · evict > IDLE_TIMEOUT"]
+        SEM -.-|"reap stale"| REAPER
+    end
+
+    subgraph AGENT["🟣  agent_loop.py  —  run_episode()"]
+        direction TB
+        PSEM["Policy Semaphore\nSemaphore(POLICY_MAX_CONCURRENT=1)\nserialises all API calls\n⟵ NEW in v2"]
+        RETRY["Exponential Backoff Retry\nInternalServerError 500 only\n3× · 2 s → 4 s → 8 s\n⟵ NEW in v2"]
+        PARSE["_parse_bash_cmd()\nXML ‹bash› or ```bash fence\nAGENT_HINT on parse fail"]
+        TRIM["_trim_messages()\nkeep within CONTEXT_LEN chars\ndrop oldest assistant+obs pairs"]
+        DONE["TASK_COMPLETE detected\nor MAX_TURNS reached\n→ evaluate(lease) → score"]
+        PSEM --> RETRY --> TRIM --> PARSE
+        PARSE -->|"loop next turn"| TRIM
+        PARSE --> DONE
+    end
+
+    subgraph POLICY["🟢  oMLX  —  Policy Server  :8080"]
+        direction TB
+        APIP["OpenAI-compat\n/v1/chat/completions"]
+        MDLP["Qwen3-8B-4bit  ≈ 5 GB\n+ loaded LoRA adapter\n(after round ≥ 1)"]
+        APIP --- MDLP
+    end
+
+end
+
+TA     -->|"allocate(task)"| SEM
+SEM    -->|"docker run → lease_id"| AGENT
+RETRY  -->|"messages[]"| APIP
+APIP   -->|"assistant content"| RETRY
+
+%% ════════════════════════════════════════════════════════════════
+%%  ROW 3 — ROLLOUT BUFFER + PRM
+%% ════════════════════════════════════════════════════════════════
+
+subgraph TIER3["  "]
+    direction LR
+
+    subgraph BUF["🔵  rollout_buffer.py  —  RolloutBuffer"]
+        direction TB
+        ACCB["accumulate Trajectory\nN_SAMPLES_PER_PROMPT per task\ntask isolation guaranteed"]
+        GRPOB["GRPO Advantage\nAᵢ = ( rᵢ − μ ) ÷ ( σ + ε )\nnormalised within group"]
+        GBATCH["GRPOBatch → asyncio.Queue\ntask_id · samples · advantages"]
+        ACCB --> GRPOB --> GBATCH
+    end
+
+    subgraph PRM["🟣  prm_client.py  —  PRMClient  ⟨PRM_ENABLE=1⟩"]
+        direction TB
+        PRMC["POST /v1/chat/completions\nPRM Server  :8081\nQwen3-4B-4bit"]
+        VOTE["Majority Vote  PRM_M\nper (cmd, obs) step → float"]
+        PJSONL["📄  prm_steps.jsonl  ⟵ NEW in v2\nsession · task · turn · score\nvotes[] · representative_eval"]
+        PRMC --> VOTE --> PJSONL
+    end
+
+end
+
+DONE   -->|"Trajectory\nmessages · score · n_turns"| ACCB
+DONE   -->|"exec · evaluate\nsem.release()"| SEM
+ACCB   -.->|"score_trajectory()\nif PRM_ENABLE=1"| PRMC
+PJSONL -.->|"turn_scores[]"| GRPOB
+GBATCH -.->|"score · turns\nprompt_tokens"| WB
+
+%% ════════════════════════════════════════════════════════════════
+%%  ROW 4 — SUBMIT LAYER  (train_async)
+%% ════════════════════════════════════════════════════════════════
+
+subgraph SUBMIT["🔵  train_async._submit_to_mlx_tune()"]
+    direction LR
+    SNAP["📄  grpo_batch_r*.jsonl\ntask_id · advantage · score\nmessages · turn_scores"]
+    APAT["adapter continuity  ⟵ NEW in v2\n_last_adapter_path\n'' → round_0001 → round_0002 → …"]
+    SNAP ~~~ APAT
+end
+
+GBATCH -->|"when len(batches)\n>= ROLLOUT_BATCH_SIZE"| SNAP
+
+%% ════════════════════════════════════════════════════════════════
+%%  ROW 5 — BRIDGE  (system Python, no mlx)
+%% ════════════════════════════════════════════════════════════════
+
+subgraph BRIDGE["🟡  mlx_grpo_bridge.py  —  run_grpo_update()  ⟵ NEW in v2"]
+    direction TB
+    JOB["📄  GRPOJob JSON\nmodel_path · lora_rank · dataset\nloss_type · beta · num_generations\nlearning_rate · wandb_run_id\nadapter_path  ← prev round"]
+    SUBP["subprocess.run()\nmlx_python -m simple_rl.grpo_worker\ncwd=repo_root · timeout=3600s"]
+    RESJSON["📄  GRPOResult JSON\nstatus · adapter_path\nstep_losses [{step, loss}]"]
+    JOB --> SUBP --> RESJSON
+end
+
+SNAP  -->|"dataset"| JOB
+APAT  -->|"prev_adapter_path"| JOB
+
+%% ════════════════════════════════════════════════════════════════
+%%  ROW 6 — WORKER SUBPROCESS  (mlx-tune venv)
+%% ════════════════════════════════════════════════════════════════
+
+subgraph WORKER["🔴  grpo_worker.py  —  mlx-tune venv subprocess  ⟵ NEW in v2"]
+    direction TB
+
+    subgraph WLOAD["Model Loading"]
+        direction LR
+        FLM["FastLanguageModel\n.from_pretrained(model_path)"]
+        PEFT["get_peft_model(r=lora_rank)\nattach LoRALinear layers\nfreeze base weights"]
+        LADP["load_adapter(prev_path)\nfill lora_a · lora_b weights\nresume checkpoint  ← NEW"]
+        FLM --> PEFT --> LADP
+    end
+
+    subgraph WVERIFY["LoRA Verification  ⟵ NEW in v2"]
+        direction LR
+        VPRINT["stdout table\nEnabled · Applied · Rank · Alpha\nTarget modules · % trainable"]
+        VWANDB["W&B: lora/*\nlora/rank · lora/alpha\nlora/trainable_params\nlora/frozen_params\nlora/applied"]
+        VPRINT ~~~ VWANDB
+    end
+
+    subgraph WTRAIN["WandbGRPOTrainer._train_native()"]
+        direction TB
+        DEFM["wandb.define_metric('grpo/step')\ndefine_metric('grpo/*', step_metric='grpo/step')\nfix x-axis for loss charts"]
+        LOOP["for step in range(iters):\n  grpo_batch_loss(model, tokenizer,\n    prompts, reward_fn,\n    num_generations, temperature)\n  mx.eval(loss)"]
+        WLOG["W&B: grpo/step · grpo/loss\ngrpo/round · grpo/learning_rate\nevery logging_steps iterations"]
+        DEFM --> LOOP --> WLOG
+    end
+
+    WSAVE["_save_adapters_and_config()\nadapters.safetensors  (lora_a, lora_b only)\nadapter_config.json  (rank · alpha · keys)\nlogs/grpo_adapters/round_NNNN/"]
+
+    WLOAD --> WVERIFY --> WTRAIN --> WSAVE
+end
+
+SUBP   -->|"exec worker"| FLM
+VWANDB -.->|"lora/* metrics"| WB
+WLOG   -.->|"grpo/* metrics"| WB
+WSAVE  -->|"adapter_path\nstep_losses"| RESJSON
+
+%% ════════════════════════════════════════════════════════════════
+%%  FEEDBACK LOOPS
+%% ════════════════════════════════════════════════════════════════
+
+RESJSON -->|"update _last_adapter_path\nfor next round"| APAT
+RESJSON -.->|"grpo/final_loss\ngrpo/round · grpo/adapter"| WB
+
+%% ════════════════════════════════════════════════════════════════
+%%  NODE STYLES
+%% ════════════════════════════════════════════════════════════════
+
+classDef orch    fill:#0F2A5C,stroke:#4B8BDE,stroke-width:2px,color:#A8D8FF
+classDef env     fill:#3B1F00,stroke:#E07B39,stroke-width:2px,color:#FFD4A8
+classDef agnt    fill:#2B0F5C,stroke:#9B72DE,stroke-width:2px,color:#D8B4FF
+classDef pol     fill:#0F3B22,stroke:#4BAD6E,stroke-width:2px,color:#A8FFCC
+classDef buf     fill:#0F1F4A,stroke:#4B72DE,stroke-width:2px,color:#A8C8FF
+classDef prm     fill:#2E0F3B,stroke:#BB72DE,stroke-width:2px,color:#E8B4FF
+classDef bridge  fill:#2A1F00,stroke:#D4A017,stroke-width:2px,color:#FFE5A0
+classDef worker  fill:#3B0F0F,stroke:#DE4B4B,stroke-width:2px,color:#FFA8A8
+classDef data    fill:#2A2A10,stroke:#D4D44B,stroke-width:2px,color:#FFFFA8
+classDef wb      fill:#1A0F2E,stroke:#7B52DE,stroke-width:2px,color:#C8A8FF
+classDef new     fill:#0F2A1A,stroke:#4BDE8B,stroke-width:2px,color:#A8FFD4
+
+class TA,LAST_AP,SNAP,APAT orch
+class SEM,REAPER env
+class PSEM,RETRY,PARSE,TRIM,DONE agnt
+class APIP,MDLP pol
+class ACCB,GRPOB,GBATCH buf
+class PRMC,VOTE,PJSONL prm
+class JOB,SUBP,RESJSON bridge
+class FLM,PEFT,LADP,VPRINT,VWANDB,DEFM,LOOP,WLOG,WSAVE worker
+class DS data
+class WB wb

@@ -1,5 +1,5 @@
 ./export-weights-bias.sh
-POLICY_URL=http://localhost:8080/v1 bash simple_rl/run.sh
+POLICY_URL=http://localhost:8080/v1 PRM_ENABLE=1 bash simple_rl/run.sh
 # --dry-run for a quick test (2 rounds, no real LLM)
 # export WANDB_KEY="your-wandb-key"
 # ./run_training.sh 
