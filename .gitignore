@@ -9,6 +9,8 @@ logs
 .DS_Store
 
 export-weights-bias.sh
+wandb/
+terminal-rl/dataset/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
